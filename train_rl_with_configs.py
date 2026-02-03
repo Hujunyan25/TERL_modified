@@ -34,6 +34,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "-N", "--model-name", nargs='+', default=[
+        "TERL_add_temporal",# match the config file: config.yaml
         "TERL",  # match the config file: config.yaml
         "MlpWithTargetSelect",  # match the config file: config.yaml, corresponding to 'w/o Relation-Extraction'
         "TransformerWithoutTargetSelect",  # match the config file: config.yaml, corresponding to 'w/o Target-Selection'

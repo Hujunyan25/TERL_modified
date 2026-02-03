@@ -11,6 +11,7 @@ from torch.nn import functional as F
 
 from policy.DQN import DqnPolicy, DqnConfig
 from policy.TERL_model import TERLPolicy, TERLConfig
+from policy.TERL_model_add_temporal import TERL_add_temporal, TERLAddTemporalConfig
 from policy.ablation_mlp_with_target_selection import MlpWithTargetSelectPolicy, MlpWithTargetSelectConfig
 from policy.ablation_transformer_without_target_selection import TransformerWithoutTargetSelectPolicy, TransformerWithoutTargetSelectConfig
 from policy.IQN import IQNPolicy, IQNConfig
@@ -115,6 +116,18 @@ class Agent:
                     )
                     self.policy_local = TERLPolicy(config=config)
                     self.policy_target = TERLPolicy(config=config)
+                    self.policy_target.load_state_dict(self.policy_local.state_dict())
+                elif self.model_name == "TERL_add_temporal":
+                    config = TERLAddTemporalConfig(
+                        hidden_dim=hidden_dimension,
+                        num_heads=num_heads,
+                        num_layers=num_layers,
+                        action_size=action_size,
+                        device=device,
+                        seed=seed
+                    )
+                    self.policy_local = TERL_add_temporal(config=config)
+                    self.policy_target = TERL_add_temporal(config=config)
                     self.policy_target.load_state_dict(self.policy_local.state_dict())
                 elif self.model_name == "MlpWithTargetSelect":
                     config = MlpWithTargetSelectConfig(
@@ -342,12 +355,14 @@ class Agent:
 
         self.optimizer.zero_grad()
         # Get max predicted Q values (for next states) from target model
+        self.policy_target.reset_history_cache()
         Q_targets_next, _ = self.policy_target(next_states)
         Q_targets_next = Q_targets_next.detach().max(2)[0].unsqueeze(1)  # (batch_size, 1, N)
 
         # Compute Q targets for current states
         Q_targets = rewards.unsqueeze(-1) + (self.GAMMA * Q_targets_next * (1. - dones.unsqueeze(-1)))
         # Get expected Q values from local model
+        self.policy_local.reset_history_cache()
         Q_expected, taus = self.policy_local(states)
         Q_expected = Q_expected.gather(2, actions.unsqueeze(-1).expand(self.BATCH_SIZE, 8, 1))
 
