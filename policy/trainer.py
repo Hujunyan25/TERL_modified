@@ -254,7 +254,6 @@ class Trainer:
                     # Learn every UPDATE_EVERY steps
                     if self.current_timestep % self.UPDATE_EVERY == 0 and agent.memory.size > agent.BATCH_SIZE:
                         agent.train()
-                        agent.policy_local.reset_history_cache()
 
                     # Update target model every target_update_interval steps
                     if self.current_timestep % self.target_update_interval == 0:

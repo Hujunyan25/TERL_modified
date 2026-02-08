@@ -25,26 +25,118 @@ class ReplayBuffer:
 
         # Initialize storage space
         self.self_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.former_self_one_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.former_self_two_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.former_self_three_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.former_self_four_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.former_self_five_state = torch.zeros((buffer_size, self.self_dim), device=device)
+
         self.next_self_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.next_former_self_one_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.next_former_self_two_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.next_former_self_three_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.next_former_self_four_state = torch.zeros((buffer_size, self.self_dim), device=device)
+        self.next_former_self_five_state = torch.zeros((buffer_size, self.self_dim), device=device)
 
         self.pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.former_one_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.former_two_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.former_three_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.former_four_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.former_five_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+
         self.next_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.next_former_one_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.next_former_two_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.next_former_three_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.next_former_four_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
+        self.next_former_five_pursuers = torch.zeros((buffer_size, max_pursuers, self.pursuer_dim), device=device)
 
         self.evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.former_one_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.former_two_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.former_three_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.former_four_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.former_five_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+
+
         self.next_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.next_former_one_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.next_former_two_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.next_former_three_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.next_former_four_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
+        self.next_former_five_evaders = torch.zeros((buffer_size, max_evaders, self.evader_dim), device=device)
 
         self.obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.former_one_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.former_two_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.former_three_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.former_four_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.former_five_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+
+
         self.next_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.next_former_one_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.next_former_two_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.next_former_three_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.next_former_four_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+        self.next_former_five_obstacles = torch.zeros((buffer_size, max_obstacles, self.obstacle_dim), device=device)
+
 
         self.masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles), dtype=torch.bool,
                                  device=device)
+        self.former_one_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                            dtype=torch.bool, device=device)
+        self.former_two_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                            dtype=torch.bool, device=device)
+        self.former_three_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                              dtype=torch.bool, device=device)
+        self.former_four_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                             dtype=torch.bool, device=device)   
+        self.former_five_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                             dtype=torch.bool, device=device)
+        
+
         self.next_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles), dtype=torch.bool,
                                       device=device)
+        self.next_former_one_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                            dtype=torch.bool, device=device)
+        self.next_former_two_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                            dtype=torch.bool, device=device)
+        self.next_former_three_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                              dtype=torch.bool, device=device)
+        self.next_former_four_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                             dtype=torch.bool, device=device)   
+        self.next_former_five_masks = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                             dtype=torch.bool, device=device)
+        
 
         self.types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles), dtype=torch.long,
                                  device=device)
+        self.former_one_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                            dtype=torch.long, device=device)
+        self.former_two_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                            dtype=torch.long, device=device)    
+        self.former_three_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                              dtype=torch.long, device=device)
+        self.former_four_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                             dtype=torch.long, device=device)
+        self.former_five_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                             dtype=torch.long, device=device)
+        
+
         self.next_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles), dtype=torch.long,
                                       device=device)
+        self.next_former_one_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                            dtype=torch.long, device=device)
+        self.next_former_two_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                            dtype=torch.long, device=device)    
+        self.next_former_three_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                              dtype=torch.long, device=device)
+        self.next_former_four_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                             dtype=torch.long, device=device)
+        self.next_former_five_types = torch.zeros((buffer_size, 1 + max_pursuers + max_evaders + max_obstacles),
+                                             dtype=torch.long, device=device)
 
         self.actions = torch.zeros(buffer_size, device=device)
         self.rewards = torch.zeros(buffer_size, device=device)
@@ -55,20 +147,98 @@ class ReplayBuffer:
         idx = self.ptr
 
         # Store current observations
-        self.self_state[idx] = obs['self']
-        self.pursuers[idx] = obs['pursuers']
-        self.evaders[idx] = obs['evaders']
-        self.obstacles[idx] = obs['obstacles']
-        self.masks[idx] = obs['masks']
-        self.types[idx] = obs['types']
+        self.self_state[idx] = obs['current_observation']['self']
+        self.pursuers[idx] = obs['current_observation']['pursuers']
+        self.evaders[idx] = obs['current_observation']['evaders']
+        self.obstacles[idx] = obs['current_observation']['obstacles']
+        self.masks[idx] = obs['current_observation']['masks']
+        self.types[idx] = obs['current_observation']['types']
+
+        # Store former observations
+        self.former_self_one_state[idx] = obs["observation_cache"][1]['self']
+        self.former_one_pursuers[idx] = obs["observation_cache"][1]['pursuers']
+        self.former_one_evaders[idx] = obs["observation_cache"][1]['evaders']
+        self.former_one_obstacles[idx] = obs["observation_cache"][1]['obstacles']
+        self.former_one_masks[idx] = obs["observation_cache"][1]['masks']
+        self.former_one_types[idx] = obs["observation_cache"][1]['types']
+
+        self.former_self_two_state[idx] = obs["observation_cache"][2]['self']
+        self.former_two_pursuers[idx] = obs["observation_cache"][2]['pursuers']
+        self.former_two_evaders[idx] = obs["observation_cache"][2]['evaders']
+        self.former_two_obstacles[idx] = obs["observation_cache"][2]['obstacles']
+        self.former_two_masks[idx] = obs["observation_cache"][2]['masks']
+        self.former_two_types[idx] = obs["observation_cache"][2]['types']
+        self.former_three_types[idx] = obs["observation_cache"][3]['types']
+
+        self.former_self_three_state[idx] = obs["observation_cache"][3]['self']
+        self.former_three_pursuers[idx] = obs["observation_cache"][3]['pursuers']
+        self.former_three_evaders[idx] = obs["observation_cache"][3]['evaders']
+        self.former_three_obstacles[idx] = obs["observation_cache"][3]['obstacles']
+        self.former_three_masks[idx] = obs["observation_cache"][3]['masks']
+        self.former_three_types[idx] = obs["observation_cache"][3]['types']
+
+        self.former_self_four_state[idx] = obs["observation_cache"][4]['self']
+        self.former_four_pursuers[idx] = obs["observation_cache"][4]['pursuers']
+        self.former_four_evaders[idx] = obs["observation_cache"][4]['evaders']
+        self.former_four_obstacles[idx] = obs["observation_cache"][4]['obstacles']
+        self.former_four_masks[idx] = obs["observation_cache"][4]['masks']
+        self.former_four_types[idx] = obs["observation_cache"][4]['types']
+
+        self.former_self_five_state[idx] = obs["observation_cache"][5]['self']
+        self.former_five_pursuers[idx] = obs["observation_cache"][5]['pursuers']
+        self.former_five_evaders[idx] = obs["observation_cache"][5]['evaders']
+        self.former_five_obstacles[idx] = obs["observation_cache"][5]['obstacles']
+        self.former_five_masks[idx] = obs["observation_cache"][5]['masks']
+        self.former_five_types[idx] = obs["observation_cache"][5]['types']
+
+
 
         # Store next observations
-        self.next_self_state[idx] = next_obs['self']
-        self.next_pursuers[idx] = next_obs['pursuers']
-        self.next_evaders[idx] = next_obs['evaders']
-        self.next_obstacles[idx] = next_obs['obstacles']
-        self.next_masks[idx] = next_obs['masks']
-        self.next_types[idx] = next_obs['types']
+
+        # Store next observations
+        self.next_self_state[idx] = obs['current_observation']['self']
+        self.next_pursuers[idx] = obs['current_observation']['pursuers']
+        self.next_evaders[idx] = obs['current_observation']['evaders']
+        self.next_obstacles[idx] = obs['current_observation']['obstacles']
+        self.next_masks[idx] = obs['current_observation']['masks']
+        self.next_types[idx] = obs['current_observation']['types']
+
+        # Store former observations
+        self.next_former_self_one_state[idx] = obs["observation_cache"][1]['self']
+        self.next_former_one_pursuers[idx] = obs["observation_cache"][1]['pursuers']
+        self.next_former_one_evaders[idx] = obs["observation_cache"][1]['evaders']
+        self.next_former_one_obstacles[idx] = obs["observation_cache"][1]['obstacles']
+        self.next_former_one_masks[idx] = obs["observation_cache"][1]['masks']
+        self.next_former_one_types[idx] = obs["observation_cache"][1]['types']
+
+        self.next_former_self_two_state[idx] = obs["observation_cache"][2]['self']
+        self.next_former_two_pursuers[idx] = obs["observation_cache"][2]['pursuers']
+        self.next_former_two_evaders[idx] = obs["observation_cache"][2]['evaders']
+        self.next_former_two_obstacles[idx] = obs["observation_cache"][2]['obstacles']
+        self.next_former_two_masks[idx] = obs["observation_cache"][2]['masks']
+        self.next_former_two_types[idx] = obs["observation_cache"][2]['types']
+
+        self.next_former_self_three_state[idx] = obs["observation_cache"][3]['self']
+        self.next_former_three_pursuers[idx] = obs["observation_cache"][3]['pursuers']
+        self.next_former_three_evaders[idx] = obs["observation_cache"][3]['evaders']
+        self.next_former_three_obstacles[idx] = obs["observation_cache"][3]['obstacles']
+        self.next_former_three_masks[idx] = obs["observation_cache"][3]['masks']
+        self.next_former_three_types[idx] = obs["observation_cache"][3]['types']
+
+        self.next_former_self_four_state[idx] = obs["observation_cache"][4]['self']
+        self.next_former_four_pursuers[idx] = obs["observation_cache"][4]['pursuers']
+        self.next_former_four_evaders[idx] = obs["observation_cache"][4]['evaders']
+        self.next_former_four_obstacles[idx] = obs["observation_cache"][4]['obstacles']
+        self.next_former_four_masks[idx] = obs["observation_cache"][4]['masks']
+        self.next_former_four_types[idx] = obs["observation_cache"][4]['types']
+
+        self.next_former_self_five_state[idx] = obs["observation_cache"][5]['self']
+        self.next_former_five_pursuers[idx] = obs["observation_cache"][5]['pursuers']
+        self.next_former_five_evaders[idx] = obs["observation_cache"][5]['evaders']
+        self.next_former_five_obstacles[idx] = obs["observation_cache"][5]['obstacles']
+        self.next_former_five_masks[idx] = obs["observation_cache"][5]['masks']
+        self.next_former_five_types[idx] = obs["observation_cache"][5]['types']
+
 
         # Store actions, rewards, and done flags
         self.actions[idx] = action
@@ -90,22 +260,110 @@ class ReplayBuffer:
         # Sample batch data
         batch = {
             'observations': {
-                'self': self.self_state.index_select(0, indices),
-                'pursuers': self.pursuers.index_select(0, indices),
-                'evaders': self.evaders.index_select(0, indices),
-                'obstacles': self.obstacles.index_select(0, indices),
-                'masks': self.masks.index_select(0, indices),
-                'types': self.types.index_select(0, indices)
+                "current_observation": {
+                    'self': self.self_state.index_select(0, indices),
+                    'pursuers': self.pursuers.index_select(0, indices),
+                    'evaders': self.evaders.index_select(0, indices),
+                    'obstacles': self.obstacles.index_select(0, indices),
+                    'masks': self.masks.index_select(0, indices),
+                    'types': self.types.index_select(0, indices)     
+                },
+                "observation_cache": {
+                    1: {
+                        'self': self.former_self_one_state.index_select(0, indices),
+                        'pursuers': self.former_one_pursuers.index_select(0, indices),
+                        'evaders': self.former_one_evaders.index_select(0, indices),
+                        'obstacles': self.former_one_obstacles.index_select(0, indices),
+                        'masks': self.former_one_masks.index_select(0, indices),
+                        'types': self.former_one_types.index_select(0, indices)
+                    },
+                    2: {
+                        'self': self.former_self_two_state.index_select(0, indices),
+                        'pursuers': self.former_two_pursuers.index_select(0, indices),
+                        'evaders': self.former_two_evaders.index_select(0, indices),
+                        'obstacles': self.former_two_obstacles.index_select(0, indices),
+                        'masks': self.former_two_masks.index_select(0, indices),
+                        'types': self.former_two_types.index_select(0, indices)
+                    },
+                    3: {
+                        'self': self.former_self_three_state.index_select(0, indices),
+                        'pursuers': self.former_three_pursuers.index_select(0, indices),
+                        'evaders': self.former_three_evaders.index_select(0, indices),
+                        'obstacles': self.former_three_obstacles.index_select(0, indices),
+                        'masks': self.former_three_masks.index_select(0, indices),
+                        'types': self.former_three_types.index_select(0, indices)
+                    },
+                    4: {
+                        'self': self.former_self_four_state.index_select(0, indices),
+                        'pursuers': self.former_four_pursuers.index_select(0, indices),
+                        'evaders': self.former_four_evaders.index_select(0, indices),
+                        'obstacles': self.former_four_obstacles.index_select(0, indices),
+                        'masks': self.former_four_masks.index_select(0, indices),
+                        'types': self.former_four_types.index_select(0, indices)
+                    },
+                    5: {
+                        'self': self.former_self_five_state.index_select(0, indices),
+                        'pursuers': self.former_five_pursuers.index_select(0, indices),
+                        'evaders': self.former_five_evaders.index_select(0, indices),   
+                        'obstacles': self.former_five_obstacles.index_select(0, indices),
+                        'masks': self.former_five_masks.index_select(0, indices),
+                        'types': self.former_five_types.index_select(0, indices)
+                    }
+                }
             },
             'actions': self.actions.index_select(0, indices),
             'rewards': self.rewards.index_select(0, indices),
             'next_observations': {
-                'self': self.next_self_state.index_select(0, indices),
-                'pursuers': self.next_pursuers.index_select(0, indices),
-                'evaders': self.next_evaders.index_select(0, indices),
-                'obstacles': self.next_obstacles.index_select(0, indices),
-                'masks': self.next_masks.index_select(0, indices),
-                'types': self.next_types.index_select(0, indices)
+                "current_observation": {
+                    'self': self.next_self_state.index_select(0, indices),
+                    'pursuers': self.next_pursuers.index_select(0, indices),
+                    'evaders': self.next_evaders.index_select(0, indices),
+                    'obstacles': self.next_obstacles.index_select(0, indices),
+                    'masks': self.next_masks.index_select(0, indices),
+                    'types': self.next_types.index_select(0, indices)
+                },
+                "observation_cache": {
+                    1: {
+                        'self': self.next_former_self_one_state.index_select(0, indices),
+                        'pursuers': self.next_former_one_pursuers.index_select(0, indices),
+                        'evaders': self.next_former_one_evaders.index_select(0, indices),
+                        'obstacles': self.next_former_one_obstacles.index_select(0, indices),
+                        'masks': self.next_former_one_masks.index_select(0, indices),
+                        'types': self.next_former_one_types.index_select(0, indices)
+                    },
+                    2: {
+                        'self': self.next_former_self_two_state.index_select(0, indices),
+                        'pursuers': self.next_former_two_pursuers.index_select(0, indices),
+                        'evaders': self.next_former_two_evaders.index_select(0, indices),
+                        'obstacles': self.next_former_two_obstacles.index_select(0, indices),
+                        'masks': self.next_former_two_masks.index_select(0, indices),
+                        'types': self.next_former_two_types.index_select(0, indices)
+                    },
+                    3: {
+                        'self': self.next_former_self_three_state.index_select(0, indices),
+                        'pursuers': self.next_former_three_pursuers.index_select(0, indices),
+                        'evaders': self.next_former_three_evaders.index_select(0, indices), 
+                        'obstacles': self.next_former_three_obstacles.index_select(0, indices),
+                        'masks': self.next_former_three_masks.index_select(0, indices),
+                        'types': self.next_former_three_types.index_select(0, indices)
+                    },
+                    4: {
+                        'self': self.next_former_self_four_state.index_select(0, indices),
+                        'pursuers': self.next_former_four_pursuers.index_select(0, indices),
+                        'evaders': self.next_former_four_evaders.index_select(0, indices),
+                        'obstacles': self.next_former_four_obstacles.index_select(0, indices),
+                        'masks': self.next_former_four_masks.index_select(0, indices),
+                        'types': self.next_former_four_types.index_select(0, indices)
+                    },
+                    5: {
+                        'self': self.next_former_self_five_state.index_select(0, indices),
+                        'pursuers': self.next_former_five_pursuers.index_select(0, indices),
+                        'evaders': self.next_former_five_evaders.index_select(0, indices),
+                        'obstacles': self.next_former_five_obstacles.index_select(0, indices),
+                        'masks': self.next_former_five_masks.index_select(0, indices),
+                        'types': self.next_former_five_types.index_select(0, indices)
+                    }
+                }
             },
             'dones': self.dones.index_select(0, indices)
         }

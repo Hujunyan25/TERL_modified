@@ -67,6 +67,67 @@ class Pursuer(Robot):
         self.num_pursuer_feature = 7
         self.num_evader_feature = 7
 
+        #新增：观测缓存初始化
+        self.cache_len = 5 #固定缓存前5个时间步
+        self.obs_cache = {} #初始化空的字典，
+        self._valid_obs = [] #初始化空列表，后续生成第一个观测后填充0
+        #填充这个_former_obs内容
+        self._former_obs = self._zero_observation_dict()
+
+    def _zero_observation_dict(self) -> dict:
+        """
+        生成与输入观测结构一致的0填充字典,
+        初始值为0，key包含：self/pursuers/evaders/obstacles/masks/types
+        Returns:
+            dict: 0填充的观测字典，结构与输入完全一致
+        """
+        # 从感知模块获取最大观测数量（与原有感知逻辑一致，避免硬编码）
+        max_pursuer = self.perception.max_pursuer_num
+        max_evader = self.perception.max_evader_num
+        max_obstacle = self.perception.max_obstacle_num
+        
+        # 计算masks和types的总长度（与原有assert校验逻辑一致）
+        total_masks_types_len = 1 + max_pursuer + max_evader + max_obstacle
+
+        # 严格按current_observation_dict格式生成0值字典
+        zero_obs_dict = {
+            # self: 一维数组，长度=自身特征数
+            "self": np.zeros(shape=(self.num_self_feature,), dtype=np.float32),
+            # pursuers: 二维数组，形状=(最大追逃者数, 追逃者特征数)
+            "pursuers": np.zeros(shape=(max_pursuer, self.num_pursuer_feature), dtype=np.float32),
+            # evaders: 二维数组，形状=(最大逃逸者数, 逃逸者特征数)
+            "evaders": np.zeros(shape=(max_evader, self.num_evader_feature), dtype=np.float32),
+            # obstacles: 二维数组，形状=(最大障碍物数, 障碍物特征数)
+            "obstacles": np.zeros(shape=(max_obstacle, self.num_static_feature), dtype=np.float32),
+            # masks: 一维布尔型数组（初始0→False），长度与原有感知逻辑一致
+            "masks": np.zeros(shape=(total_masks_types_len,), dtype=np.bool_),
+            # types: 一维数值型数组，长度与masks一致
+            "types": np.zeros(shape=(total_masks_types_len,), dtype=np.float32)
+        }
+        return zero_obs_dict
+    
+    def _update_obs_cache(self, former_obs: dict):
+        '更新观测缓存，保证缓存始终保留最新的self.cache_len个时间观测步'
+        '逻辑：1. 追加当前观测到缓存；2. 若缓存长度超过5，截断为最后5个；3. 若不足5，前面补0填充观测'
+        ':param current_obs: 当前时间步的观测字典'
+        
+        # 1. 追加当前观测到有效列表（深拷贝防止原数据被修改，原逻辑保留）
+        self._valid_obs.append(copy.deepcopy(former_obs))
+        
+        # 2. 截断有效列表，只保留最新的self.cache_len个观测（原逻辑保留）
+        if len(self._valid_obs) > self.cache_len:
+            self._valid_obs = self._valid_obs[-self.cache_len:]
+        
+        # 3. 不足self.cache_len个时，前面补0（生成0填充观测，原逻辑保留）
+        pad_num = self.cache_len - len(self._valid_obs)
+        zero_obs = self._zero_observation_dict()
+        # 拼接补0部分 + 有效观测部分（保证整体长度为cache_len）
+        full_obs_list = [zero_obs for _ in range(pad_num)] + self._valid_obs
+        
+        # 4. 核心：将拼接后的列表转为字典（key=0~cache_len-1，value=对应观测）
+        self.obs_cache = {idx + 1: obs for idx, obs in enumerate(reversed(full_obs_list))}
+
+
     def find_related_evader(self, evaders: List[Evader]):
         """
         Find evaders within the encirclement distance.
@@ -240,6 +301,9 @@ class Pursuer(Robot):
         """
         if self.deactivated:
             return None, self.collision
+        
+        #新增：更新观测缓存
+        self._update_obs_cache(self._former_obs)
 
         self.perception.observation["self"].clear()
         self.perception.observation["statics"].clear()
@@ -297,7 +361,7 @@ class Pursuer(Robot):
                 new_obs = list(np.concatenate((pos_r, v_r, [dis, angle, pursuing_signal])))
                 self.perception.observation["pursuers"].append(new_obs)
 
-        # Handle pursuer masks
+        # Handle pursuer masks（初始的时候有值的时候对应的空填True，填充位填的是False）
         pursuer_observed_count = len(self.perception.observation["pursuers"])
         pursuer_masks = [True] * min(pursuer_observed_count, self.perception.max_pursuer_num)
         if pursuer_observed_count < self.perception.max_pursuer_num:
@@ -376,7 +440,7 @@ class Pursuer(Robot):
         assert len(pursuer_observations) == self.num_pursuer_state
 
         # Organize observations into structured format
-        observation_dict = {
+        current_observation_dict = {
             "self": np.array(self_state).reshape(self.num_self_feature),
             "pursuers": np.array(pursuer_observations).reshape(-1, self.num_pursuer_feature),
             "evaders": np.array(evader_observations).reshape(-1, self.num_evader_feature),
@@ -385,4 +449,11 @@ class Pursuer(Robot):
             "types": np.array(self.perception.observation['types'])  # Entity type identifiers
         }
 
-        return observation_dict, self.collision
+        self._former_obs = current_observation_dict
+
+        full_observation_dict = {
+            "current_observation": current_observation_dict,
+            "observation_cache": self.obs_cache
+        }#这里包含了当前和前五帧的信息
+
+        return full_observation_dict, self.collision

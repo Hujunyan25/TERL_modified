@@ -116,6 +116,185 @@ class TargetSelectionModule(nn.Module):
         return enhanced_feature, attention_weights.squeeze(1)
 
 
+class TemporalFusionEncoder(nn.Module):
+    def __init__(self, d_single, n_heads=4, d_model=256, num_layers=4, dropout=0.1):
+        """
+        仅对前五帧做时序融合的Transformer编码器模块
+        :param d_single: 单目标基础维度（如7，ego/team/evader/obstacle最大值）
+        :param n_heads: 多头注意力头数，要求d_model % n_heads == 0
+        :param d_model: 编码器模型维度（推荐32/64）
+        :param num_layers: TransformerEncoderLayer堆叠层数（推荐2）
+        :param dropout: dropout率
+        """
+        super().__init__()
+        self.d_single = d_single
+        self.d_model = d_model
+
+        # 1. 特征编码：基础特征→d_model，融合目标类型
+        self.type_emb = nn.Embedding(4, d_model)  # 0=ego,1=team,2=evader,3=obstacle
+
+        # 2. 时序位置编码：为前五帧（5帧）添加位置信息
+        self.pos_emb = nn.Embedding(5, d_model)  # 仅5帧，精准适配
+
+        # 3. Transformer编码器核心
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_model * 4,
+            dropout=dropout,
+            batch_first=True,  # 输入[B, T, d_model]
+            norm_first=True,   # 先归一化后计算，提升训练稳定性
+            activation='gelu'
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        # 4. 时序聚合+投影：还原为单目标基础维度
+        self.proj = nn.Linear(d_model, d_single)
+        self.dropout = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(d_model)
+
+    def forward(self, features_5former, masks_5former, types_5former):
+        """
+        前向传播：前五帧→单帧历史融合特征
+        :param features_5former: 前五帧特征 [B,5,N,D]
+        :param masks_5former: 前五帧掩码 [B * N,5]
+        :param types_5former: 前五帧类型 [B * N,5]
+        :return: hist_fusion: 历史融合特征 [B,1,N,D]
+        """
+        B, N, T, D = features_5former.shape  # T=5,B代表批次，T代表时序数量，N代表节点数量，D代表维度
+        device = features_5former.device
+
+        # 维度重排：[B*N,5,D]，每个目标独立做时序融合
+        feature_reshaped = features_5former.reshape(B*N, T, D)
+        # masks_reshaped = masks_5former.permute(0,2,1).reshape(B*N, T)
+        # types_5former_unsqueeze = types_5former.unsqueeze(0).reshape(B, T, N)
+        # types_reshaped = types_5former_unsqueeze.permute(0,2,1).reshape(B*N, T)
+        # 特征编码+类型+位置嵌入
+        x_type = self.type_emb(types_5former.long()) # shape：[B*N, T = 5, d_model]
+        pos_idx = torch.arange(T, device=device).expand(B*N, T)
+        x_pos = self.pos_emb(pos_idx) #shape: [B*N, T = 5, d_model]
+        print("feature_reshaped.shape:", feature_reshaped.shape)
+        print("x_type.shape:", x_type.shape)
+        print("x_pos.shape:", x_pos.shape)
+        x_enc = self.dropout(feature_reshaped + x_type + x_pos)
+        x_enc = self.norm(x_enc)
+
+        # 生成注意力掩码：-1e为padding，需要屏蔽，0为有效值
+        # masks_5former = masks_5former.permute(1, 0)  # [B*N,5]
+        # masks_5former_unsqueeze = masks_5former.unsqueeze(0).reshape(B, T, N)
+        # masks_5former_unsqueeze = masks_5former_unsqueeze.permute(0,2,1).reshape(B*N, T)
+        # masks_5former_after = masks_5former_unsqueeze
+        if masks_5former.dtype == torch.bool:
+            attn_mask = ~masks_5former.bool()
+        else:
+            attn_mask = (1 - masks_5former) * -1e9
+
+        # Transformer编码器时序融合
+        x_temporal = self.encoder(x_enc, src_key_padding_mask=attn_mask)  # [B*N,5,d_model]
+
+        # 时序聚合（取最后一帧/均值，推荐取最后一帧）
+        x_agg = x_temporal[:, -1, :]  # [B*N,d_model]
+
+        # 投影还原维度+恢复形状
+        history_fusion = self.proj(x_agg).reshape(B, N, D)  # [B,N,D]
+        history_mask = masks_5former[:, -1].unsqueeze(0).reshape(B, -1)  # [B,N]
+        history_type = types_5former[:, -1].unsqueeze(0).reshape(B, -1)  # [B,N]
+
+        return history_fusion, history_mask, history_type
+
+
+class FormerCurrentFusionAttention(nn.Module):
+    def __init__(self, d_single, d_model=256, n_heads=4, dropout=0.1):
+        """
+        历史融合特征+当前帧 空间自注意力融合模块
+        :param d_single: 单目标基础维度
+        :param d_model: 空间融合模型维度
+        :param n_heads: 多头注意力头数
+        :param dropout: dropout率
+        """
+        super().__init__()
+        self.d_single = d_single
+        self.d_model = d_model
+
+        # 1. 特征重编码：适配空间融合
+        self.feat_linear = nn.Linear(d_single, d_model)
+        self.type_emb = nn.Embedding(4, d_model)  # 再次融合类型信息
+
+        # 2. 空间自注意力层
+        self.space_attn = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            dropout=dropout,
+            batch_first=True
+        )
+
+        # 3. 前馈网络+残差归一化
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, d_model*4),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model*4, d_model)
+        )
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+        # 4. 输出投影：多目标/全局可选
+        self.proj_multi = nn.Linear(d_model, d_single)  # 多目标输出（保留结构）
+        self.proj_global = nn.Linear(d_model * 2, d_model)  # 全局输出（历史+当前拼接）
+
+    def forward(self, x_concat, masks_concat, types_concat, return_global=False):
+        """
+        前向传播：历史+当前帧拼接特征→空间融合特征
+        :param x_concat: 拼接特征 [B,2*N,D]（2=历史1帧+当前1帧）
+        :param masks_concat: 拼接掩码 [B,2*N]
+        :param types_concat: 拼接类型 [B,2*N]
+        :param return_global: 是否返回全局单向量特征
+        :return: 多目标空间融合特征 [B,2,N,D] / 全局特征 [B,d_model]
+        """
+        B, _ , D = x_concat.shape
+        x_concat = x_concat.reshape(B, -1, 2, D)
+        B, N, T_cat, D = x_concat.shape  # T_cat=2
+        # 维度压缩：[B, N*T_cat, D]，将「历史+当前」作为不同目标参与空间交互
+        x_squeeze = x_concat.permute(0,2,1,3).reshape(B * N, T_cat, D)
+
+        # masks_concat张量变换
+        masks_concat_unsqueeze = masks_concat.unsqueeze(0).reshape(B, N, T_cat)
+        masks_concat_changed = masks_concat_unsqueeze.reshape(B * N, T_cat)
+        # types_concat张量变换
+        types_concat_unsqueeze = types_concat.unsqueeze(0).reshape(B, N, T_cat)
+        types_concat_changed = types_concat_unsqueeze.reshape(B * N, T_cat)
+
+        # 特征编码+类型嵌入
+        x_feat = self.feat_linear(x_squeeze)  # [B*N, 2, d_model]
+        x_type = self.type_emb(types_concat_changed.long())
+        x_enc = self.dropout(x_feat + x_type)
+
+        # 空间自注意力（屏蔽补0特征）
+        if masks_concat_changed.dtype == torch.bool:
+            attn_mask = ~masks_concat_changed.bool()
+        else:
+            attn_mask = (1 - masks_concat_changed) * -1e9
+        x_attn, _ = self.space_attn(x_enc, x_enc, x_enc, key_padding_mask=attn_mask)
+        x_attn = self.norm1(x_enc + self.dropout(x_attn))
+
+        # 前馈网络+残差
+        x_ffn = self.ffn(x_attn)
+        x_ffn = self.norm2(x_attn + self.dropout(x_ffn))  # [B, N*2, d_model]
+
+        # 输出分支
+        if return_global:
+            # 全局融合：单向量聚合所有信息
+            global_feat = self.proj_global(x_ffn.reshape(B, -1))  # [B,d_model]
+            return global_feat
+        else:
+            # 多目标融合：还原为[B,2,N,D]结构
+            x_proj = self.proj_multi(x_ffn)  # [B, N*2, D]
+            space_fusion = x_proj.reshape(B, N, T_cat, D).permute(0,2,1,3)  # [B,2,N,D]
+            space_fusion = space_fusion.mean(dim = 1, keepdim = False)
+            return space_fusion
+
+
 class TERL_add_temporal(nn.Module):
     """
     TERL policy network implementation
@@ -150,20 +329,7 @@ class TERL_add_temporal(nn.Module):
             'pursuers': 7,  # [px, py, vx, vy, dist, angle, pursuing_signal]
             'evaders': 7,  # [px, py, vx, vy, dist, pos_angle, head_angle]
             'obstacles': 5  # [px, py, radius, dist, angle]
-        }
-
-        # 新增：拼接融合线性层（2D→D），搭配LayerNorm
-        self.concat_fusion = nn.Sequential(
-            nn.Linear(2 * self.hidden_dim, self.hidden_dim),
-            nn.LayerNorm(self.hidden_dim),
-            nn.ReLU(inplace=True)  # 可选：增加非线性，提升融合能力
-        )  
-
-        self.final_fusion = nn.Sequential(
-            nn.Linear(self.hidden_dim * (TERLAddTemporalConfig.n_history - 1), self.hidden_dim),
-            nn.LayerNorm(self.hidden_dim),
-            nn.ReLU(inplace=True)  # 可选：增加非线性，提升融合能力
-        )  
+        } 
 
         # IQN parameters
         self.K = config.num_quantiles
@@ -174,6 +340,11 @@ class TERL_add_temporal(nn.Module):
 
         # Define feature encoders
         self.entity_encoders = nn.ModuleDict({
+            name: encoder(dim, self.hidden_dim)
+            for name, dim in self.feature_dims.items()
+        })
+
+        self.former_entity_encoders = nn.ModuleDict({
             name: encoder(dim, self.hidden_dim)
             for name, dim in self.feature_dims.items()
         })
@@ -190,25 +361,6 @@ class TERL_add_temporal(nn.Module):
             nn.LayerNorm(self.hidden_dim)
         ).to(self.device)
 
-        #新增2，时间编码模块：
-        self.time_emb_curr = nn.Parameter(torch.randn(self.hidden_dim, device=self.device)) #当前帧时间编码
-        self.time_emb_his = nn.Parameter(torch.randn(self.hidden_dim, device=self.device)) #历史帧时间编码
-
-        #新增3.时序融合模块：拼接当前特征+补偿后的历史特征，压缩回到hidden_dim
-        self.temporal_fusion = nn.Sequential(
-            nn.Linear(self.hidden_dim * 2, self.hidden_dim),
-            nn.ReLU(),
-            nn.LayerNorm(self.hidden_dim)
-        ).to(self.device)
-
-        # 历史缓存：列表式存储最近3帧，先进先出 [feat, pos, mask]
-        # feat: [B, M, D], pos: [B, 2], mask: [B, M]
-        self.history_cache = {
-            'transformed_feat': [],  # Transformer编码后的实体特征
-            'self_original_pos': [],  # Self的原始2D位置（用于计算位移）
-            'global_mask': []         # 全局实体掩码（[B, M]）
-        }
-
         # Transformer encoder
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.hidden_dim,
@@ -224,11 +376,13 @@ class TERL_add_temporal(nn.Module):
             enable_nested_tensor=False
         )
 
-        #新增4.历史缓存机制：缓存Transformer输入之前的最终融合的特征+上一时刻self位置
-        #形状：his_cache_feat [batch_size, 实体总数，hidden_dim]
-        #形状：his_cahce_pos [Batch_size, 2](批次，self的2D原始位置)
-        self.his_cache_feat = None
-        self.his_cache_pos = None
+        #初始化历史帧时序融合网络
+        self.temporal_fusion_encoder = TemporalFusionEncoder(d_single= self.hidden_dim)
+
+        #初始化空间融合网络
+        self.former_current_fusion_encoder = FormerCurrentFusionAttention(d_single=self.hidden_dim)
+
+
 
         # Add target selection module
         self.target_selection = TargetSelectionModule(self.hidden_dim)
@@ -246,10 +400,6 @@ class TERL_add_temporal(nn.Module):
 
         # Move model to specified device
         self.to(self.device)
-
-        # For storing the last attention weights
-        self._last_target_weights = None
-        self._last_transformer_weights = None
 
     def _init_weights(self):
         """Initialize network weights"""
@@ -276,125 +426,103 @@ class TERL_add_temporal(nn.Module):
                 nn.init.constant_(param.data, 0)
 
 
-    def reset_history_cache(self):
-        '''重置历史缓存，适配新的任务/新的episode'''
-        self.history_cache['transformed_feat'].clear()
-        self.history_cache['self_original_pos'].clear()
-        self.history_cache['global_mask'].clear()
-
-
-    def _update_history_cache(self, embedded_feature: torch.Tensor, self_ori_pos: torch.Tensor, global_mask: torch.Tensor):
+    def _motion_compensation_align(self, cached_observation: Dict[str, Dict]):
         """
-        更新历史缓存，先进先出，保留最近n_history帧
-        Args:
-            transformed_feat: Transformer编码后的特征 [B, M, D]
-            self_ori_pos: Self原始2D位置 [B, 2]
-            global_mask: 全局掩码 [B, M]
+        :param cached_observation: 历史帧的信息,key是[1,2,3,4,5], value是对应帧的信息字典
+        多帧特征运动补偿+时序对齐：将t-5~t-1帧的邻居特征对齐到当前帧t的局部坐标系
+        返回：对齐后的时序特征张量 + 统一有效掩码
         """
-        # 存入当前帧数据
-        embedded_feature_detach = embedded_feature.detach().unsqueeze(0)
-        self_ori_pos_detach = self_ori_pos.detach().unsqueeze(0)
-        global_mask_detach = global_mask.detach().unsqueeze(0)
-        self.history_cache['transformed_feat'].append(embedded_feature_detach)
-        self.history_cache['self_original_pos'].append(self_ori_pos_detach)
-        self.history_cache['global_mask'].append(global_mask_detach)
-        # 超出缓存帧数则弹出最旧帧
-        if len(self.history_cache['transformed_feat']) > TERLAddTemporalConfig.n_history:
-            self.history_cache['transformed_feat'].pop(0)
-            self.history_cache['self_original_pos'].pop(0)
-            self.history_cache['global_mask'].pop(0)
+        # 解包缓存：时序有序 [t-5, t-4, t-3, t-2, t-1, t]
+        N_pursuer = cached_observation[1]["pursuers"].shape[1]  # 邻居数量（以当前帧为准，保证多帧一致）
+        N_evader = cached_observation[1]["evaders"].shape[1]  # 邻居数量（以当前帧为准，保证多帧一致）
+        N_obstacle = cached_observation[1]["obstacles"].shape[1]  # 邻居数量（以当前帧为准，保证多帧一致）
+        n_hist = TERLAddTemporalConfig.n_history  # 历史帧数：5帧
+        
+        # 步骤1：初始化对齐后的特征数组（存储6帧对齐后的特征）
+        # 每帧邻居特征：拼接pos+vel → (N, 4)，6帧后为(6, N, 4)
+        aligned_observations = cached_observation
+        
+        # 步骤3：历史帧（t-1~t-5）逐帧做运动补偿+对齐
+        # 预提取所有帧的自身速度 (6, 2)
+        self_velocities = []
+        for _, observation in cached_observation.items():
+            self_vel = observation["self"][:, :2] #提取前1～5帧的所有速度信息，shape：[Batch_size, 2]
+            self_velocities.append(self_vel) #这里的self_vel存的是从前1帧到前5帧的所有自己速度信息，信息由近到远排序
 
-    def _multi_step_motion_compensation(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        多步运动补偿：基于5帧历史缓存，逐实体单步掩码交集，时间衰减加权融合多帧补偿特征
-        Returns:
-            fused_his_feat: 融合后的历史特征 [B, M, D]
-            final_fusion_mask: 最终融合掩码 [B, M]
-        """
-        n_cached = len(self.history_cache['transformed_feat'])
-        # 缓存不足5帧，无历史可补偿，返回全零
-        if n_cached < 5:
-            B = self.history_cache['transformed_feat'][-1].shape[1]
-            M = self.history_cache['transformed_feat'][-1].shape[2]
-            return torch.zeros(B, M, self.hidden_dim, device=self.device), self.history_cache['global_mask'][-1].squeeze(0)
+        for i in range(n_hist):#每一帧中提取追捕者，逃避者和障碍物的信息
+            #idx代表前idx帧
+            idx = i + 1
+            observation_former_idx = cached_observation[idx]
+            # 提取τ帧的追捕者原始特征
+            pursuers_position_former_idx = observation_former_idx["pursuers"][:, :, :2]  # (B,N,2)
+            pursuers_velocity_former_idx = observation_former_idx["pursuers"][:, :, 2:4]  # (B,N,2)
+            #提取τ帧的逃避者原始特征
+            evader_position_former_idx = observation_former_idx["evaders"][:, :, :2] #(B,N,2)
+            evader_velocity_former_idx = observation_former_idx["evaders"][:, :, 2:4] #(B,N,2)
 
-        compensated_history_feats = []
-        weight_list = []
-        fusion_mask_list = []
-        # 遍历所有连续历史帧对（i, i+1），逐对做单步补偿
-        for i in range(n_cached - 1):
-            weight_list.clear()
-            # 取第i帧（历史）和第i+1帧（次历史）
-            his_feat_i = self.history_cache['transformed_feat'][i].squeeze(0)
-            his_pos_i = self.history_cache['self_original_pos'][i].squeeze(0)
-            his_mask_i = self.history_cache['global_mask'][i].squeeze(0)
+            #提取τ帧的障碍物原始特征
+            obstacle_former_idx = observation_former_idx["obstacles"][:, :, :2] #(B,N,2)
+            
+            # 计算从前几帧到t帧的累计位置补偿量 Δp_{t←τ}
+            # 1. 提取前idx帧的自身速度 (前几帧, 2)
+            self_velocities_t_to_current = self_velocities[:idx] #shape:[batch_size, 2]
+            self_velocities_t_to_current_stack = torch.stack(self_velocities_t_to_current, dim=0) #shape:[帧数，batch_size, 2]
+            # 2. pursuer和evader速度v_tau广播，与自身速度维度匹配
+            pursuer_t_broadcast = torch.tile(pursuers_velocity_former_idx.unsqueeze(0), (len(self_velocities_t_to_current), 1, 1, 1)) #shape:[帧数，batch_size, N, 2]
+            evader_t_broadcast = torch.tile(evader_velocity_former_idx.unsqueeze(0), (len(self_velocities_t_to_current), 1, 1, 1)) #shape:[帧数，batch_size, N, 2]
+            
+            # 3. 自身速度广播
+            self_velocities_broadcast_pursuer = torch.tile(self_velocities_t_to_current_stack.unsqueeze(2), (1, 1, N_pursuer, 1)) #shape：[帧数，batch_size, N, 2]
+            self_velocities_broadcast_evader = torch.tile(self_velocities_t_to_current_stack.unsqueeze(2), (1, 1, N_evader, 1)) #shape：[帧数，batch_size, N, 2]
+            self_velocities_broadcast_obstacle = torch.tile(self_velocities_t_to_current_stack.unsqueeze(2), (1, 1, N_obstacle, 1)) #shape：[帧数，batch_size, N, 2]
+            # 4. 计算每一步补偿量并累加 (N,2)
+            delta_position_step_pursuer = (self_velocities_broadcast_pursuer - pursuer_t_broadcast) * 0.05  # (帧数,batch_size, N,2)
+            delta_position_step_evader = (self_velocities_broadcast_evader - evader_t_broadcast) * 0.05  # (帧数,batch_size, N,2)
+            delta_position_step_obstacles = self_velocities_broadcast_obstacle * 0.05 # (帧数,batch_size, N,2)
+            delta_pursuer_total = torch.sum(delta_position_step_pursuer, dim=0) # (batch_size, N,2) 累计补偿量
+            delta_evader_total = torch.sum(delta_position_step_evader, dim=0)  # (batch_size, N,2) 累计补偿量
+            delta_obstacles_total = torch.sum(delta_position_step_obstacles, dim=0) # (batch_size, N,2) 累计补偿量
+            
 
-            his_feat_j = self.history_cache['transformed_feat'][i+1].squeeze(0)
-            his_pos_j = self.history_cache['self_original_pos'][i+1].squeeze(0)
-            his_mask_j = self.history_cache['global_mask'][i+1].squeeze(0)
+            # 5. 位置补偿：τ帧位置对齐到t帧坐标系
+            pursuer_t_aligned = pursuers_position_former_idx + delta_pursuer_total  # (batch_size, N_pursuer,2)
+            evader_t_aligned = evader_position_former_idx + delta_evader_total  # (batch_size, N_evader,2)
+            obstacles_t_aligned = obstacle_former_idx + delta_obstacles_total  # (batch_size, N_obstacles,2)
+            # 6. 速度无需补偿，保留原始值（反映邻居主动运动趋势）
+            
+            # 7. 赋值到对齐特征数组
+            aligned_observations[idx]["pursuers"][:, :, :2] = pursuer_t_aligned  # (bach_size, N,2)
+            aligned_observations[idx]["evaders"][:, :, :2] = evader_t_aligned #(batch_size, N, 2)
+            aligned_observations[idx]["obstacles"][:, :, :2] = obstacles_t_aligned #(batch_size, N, 2)
+        
+        return aligned_observations 
 
-            B, M, D = his_feat_i.shape
-            # 1. 逐实体单步掩码交集：仅连续两帧有效才参与补偿
-            step_fusion_mask = his_mask_i * his_mask_j  # [B, M]
-            # 2. 计算单步位移：Self位置差 [B, 2]
-            delta_pos = his_pos_j - his_pos_i  # [B, 2]
-            # 3. 位移编码为特征 [B, D]
-            delta_feat = self.displacement_encoder(delta_pos)  # [B, D]
-            delta_feat = delta_feat.unsqueeze(1)  # [B, 1, D]
-            delta_feat = delta_feat.expand(-1, M, -1)  # [B, M, D]
-            # 4. 历史特征运动补偿：广播位移到所有实体 [B, M, D]
-            compensated_feat = his_feat_i + delta_feat # [B, M, D]
-
-            # 将后一帧和当前帧进行融合
-            fused_feat = self.concat_fusion(torch.cat([his_feat_j, delta_feat], dim=-1))  # [B, M, D]
-            # 5. 掩码屏蔽无效实体(fused_feat的形状为[B, M, D]， step_fusion_mask的形状为[B, M])
-            compensated_feat = fused_feat * step_fusion_mask.unsqueeze(-1)  # [B, M, D]
-            fusion_mask_list.append(step_fusion_mask)
-            # # 6. 提取Self特征（第0位，与原始逻辑一致）
-            # compensated_self_feat = compensated_feat[:, 0, :]  # [B, D]
-            # compensated_his_feats.append(compensated_self_feat)
-            # compensated_his_feats.append(compensated_feat)
-
-            # 时间衰减权重：越近的帧权重越高（i越大，权重越高）
-            weight = (i + 1) / sum(range(1, n_cached))
-            weight_tensor = torch.tensor(weight, device=self.device, dtype=torch.float32)
-            weight_list.append(weight_tensor)
-            weight_tensored = torch.stack(weight_list).unsqueeze(-1).unsqueeze(-1).to(self.device)  # [1,1,1]
-            weight_tensored = weight_tensored.permute(1, 2, 0).expand(B, M, -1) # 维度：[1, M, 1]
-            weighted_compensated_feat = weight_tensored * compensated_feat # 维度：[B, M, D]
-            compensated_history_feats.append(weighted_compensated_feat)
-
-        # 多帧补偿特征加权融合
-        # weights = weights.permute(1, 2, 0, 3).flatten(start_dim= -2).expand(-1, M, -1) # 维度：[1, 1, D*(n-1)]
-        compensated_his_feats = torch.stack(compensated_history_feats)  # [n-1, B, M, D]
-        compensated_his_feats = compensated_his_feats.permute(1, 2, 0, 3).flatten(start_dim= -2) #维度：[B, M, D*(n-1)]
-        print("compensated_his_feats shape:", compensated_his_feats.shape)
-
-        final_fusion_feat = self.final_fusion(compensated_his_feats) #维度：[B, M, D]
-        fusions = torch.stack(fusion_mask_list)  # [n-1, B, M]
-        print("fusion_mask_list shape:", fusions.shape)
-        # 最终融合掩码：最后一对帧的单步掩码
-        final_fusion_mask = torch.prod(fusions, dim=0)  # [B, M]
-
-        return final_fusion_feat, final_fusion_mask
     # --------------------------------------------------------------------------------
     
-    def _validate_input(self, obs: Dict[str, torch.Tensor]) -> None:
+    def _validate_input(self, obs: Dict[str, Dict]) -> None:
         """Validate the format and dimensions of input data"""
         if not isinstance(obs, dict):
             raise ValueError("obs must be a dictionary")
 
-        required_keys = {'self', 'types', 'masks'}
+        required_keys = {"current_observation", "observation_cache"}
+        required_keys_in_current_observation = {'self', 'types', 'masks'}
+        required_keys_in_cache_observation = {1, 2, 3, 4, 5}
         if not all(key in obs for key in required_keys):
             raise ValueError(f"obs must contain keys: {required_keys}")
+        if not all(key in obs["current_observation"] for key in required_keys_in_current_observation):
+            raise ValueError(f"current observation must contain keys: {required_keys_in_current_observation}")
 
-        if obs['self'].dim() != 2:
+        if not all(key in obs["observation_cache"] for key in required_keys_in_cache_observation):
+            raise ValueError(f"cache observation must contain keys: {required_keys_in_cache_observation}")
+
+        if obs["current_observation"]['self'].dim() != 2:
             raise ValueError("self features must be 2-dimensional [batch_size, feature_dim]")
 
-        if obs['self'].shape[1] != self.feature_dims['self']:
+        if obs["current_observation"]['self'].shape[1] != self.feature_dims['self']:
             raise ValueError(f"self features must have dimension {self.feature_dims['self']}")
 
-    def encode_entities(self, obs: Dict[str, torch.Tensor]) -> torch.Tensor:
+    
+    def encode_entities(self, obs: Dict[str, Dict]) -> torch.Tensor:
         """
         Encode entity features and process through Transformer
 
@@ -404,48 +532,65 @@ class TERL_add_temporal(nn.Module):
         Returns:
             torch.Tensor: Encoded features [batch_size, hidden_dim]
         """
-        B = obs['self'].shape[0]
-        encoded_features = []
 
-        # Encode various entities
+        batch_size = obs["current_observation"]['self'].shape[0]
+        current_observation = obs['current_observation'] #是当前观测到的信息，是一个字典
+        current_encoded_features = []
+        # Encode various entities,编码current_observation的那个信息
         for entity_type, encoder in self.entity_encoders.items():
-            features = obs[entity_type]
+            feature = current_observation[entity_type]
             if entity_type == 'self':
-                encoded = encoder(features).unsqueeze(1)
-                self_original_position = features[:, :2]  # 提取self的原始2D位置
+                encoded = encoder(feature).unsqueeze(1)
             else:
-                encoded = encoder(features)
-            encoded_features.append(encoded)
+                encoded = encoder(feature)
+            current_encoded_features.append(encoded)
+        current_cat_feature = torch.cat(current_encoded_features, dim=1)
 
-        # Concatenate all encoded features
-        entity_embed = torch.cat(encoded_features, dim=1)
+        #先进行运动补偿
+        observation_after_compension = self._motion_compensation_align(obs["observation_cache"])
+        # 生成初始的信息，以供输入
+        cached_feature_dict = {}
+        for key, observation in observation_after_compension.items(): #解析缓存中每一帧的内容, observation_after_compension: Dict[str, Dict]
+            each_key_feature  = []
+            for entity_type, encoder in self.former_entity_encoders.items():
+                feature = observation[entity_type]
+                if entity_type == 'self':
+                    encoded = encoder(feature).unsqueeze(1)
+                else:
+                    encoded = encoder(feature)
+                each_key_feature.append(encoded) #在列表中加入了每一帧的信息
+            cached_feature_dict[key] = torch.cat(each_key_feature, dim = 1)
+            #增添mask和type
+            if "masks" not in cached_feature_dict:
+                cached_feature_dict["masks"] = observation["masks"] #shape:[B, N]
+            else:
+                cached_feature_dict["masks"] = torch.cat([cached_feature_dict["masks"], observation["masks"]], dim = 0) #shape:[B* (帧数）, N]
 
-        # Add type embedding
-        type_embed = self.type_embedding(obs['types'].long())
-        tokens = entity_embed + type_embed
-        global_mask = obs['masks'] #全局掩码
+            if "types" not in cached_feature_dict:
+                cached_feature_dict["types"] = observation["types"] #shape:[B, N]
+            else:
+                cached_feature_dict["types"] = torch.cat([cached_feature_dict["types"], observation["types"]], dim = 0) #shape:[B* (帧数）, N ]
 
-        #2.更新历史缓存并执行多步运动补偿
-        self._update_history_cache(tokens, self_original_position, global_mask)
-        fused_history_feat, fusion_mask = self._multi_step_motion_compensation()
+        cached_feature_dict["masks"] = cached_feature_dict["masks"].reshape(batch_size, 5, -1).permute(0, 2, 1).reshape(-1, 5)
+        cached_feature_dict["types"] = cached_feature_dict["types"].reshape(batch_size, 5, -1).permute(0, 2, 1).reshape(-1, 5)
+        #时序输入处理生成，得到cached_feature_dict字典，键有：1，2，3，4，5，masks，types
+        #接下来把键为1，2，3，4，5的都整合到一起
+        temporal_features = []
+        for idx, features in cached_feature_dict.items():
+            if idx in [1, 2, 3, 4, 5]:
+                temporal_features.append(features)
 
-        # 3. 时序融合：当前增强特征 + 融合后的历史特征（仅Self维度）
-        # 屏蔽无效特征，保证与掩码一致
-        print("fused_history_feat shape:", fused_history_feat.shape)
-        print("fusion_mask shape:", fusion_mask.shape)
-        if (fused_history_feat == 0).all():
-            attention_mask = ~global_mask.bool()
-            transformed = self.transformer_encoder(tokens, src_key_padding_mask=attention_mask)
-        # 拼接融合
-        else:
-            fused_history_feat = fused_history_feat * fusion_mask.unsqueeze(-1)      # [B, D]
-            temporal_fused_feature = self.temporal_fusion(torch.cat([tokens, fused_history_feat], dim=-1))  
-            fused_mask_history_and_current = global_mask * fusion_mask  # 融合后的掩码
+        temporal_features = torch.cat(temporal_features, dim = 1).reshape(batch_size, -1, 5, self.hidden_dim)  #shape:[B, N * 5, D]
 
-            # Transformer processing
-            attention_mask = ~fused_mask_history_and_current.bool()
-            transformed = self.transformer_encoder(temporal_fused_feature, src_key_padding_mask=attention_mask)
+        # 对temporal_features进行时序融合
+        fused_history_feat, history_mask, history_type = self.temporal_fusion_encoder(temporal_features, cached_feature_dict["masks"], cached_feature_dict["types"])
 
+        concat_history_current_feature = torch.cat([fused_history_feat, current_cat_feature], dim = 1) #shape:[B, N * 2, D]
+        concat_history_current_mask = torch.cat([history_mask, current_observation["masks"]], dim = 1) #shape:[B, N * 2]
+        concat_history_current_type = torch.cat([history_type, current_observation["types"]], dim = 1) #shape:[B, N * 2]
+        # 对融合后的历史特征和当前特征进行空间融合
+        transformed = self.former_current_fusion_encoder(concat_history_current_feature, concat_history_current_mask, concat_history_current_type)
+        #transformed的形状是
         # Get self feature
         self_feature = transformed[:, 0]  # [B, H]
         global_feature = torch.max(transformed, dim=1).values  # [B, H]
@@ -453,21 +598,21 @@ class TERL_add_temporal(nn.Module):
         enhanced_feature = torch.cat([self_feature, global_feature], dim=-1)  # [B, 2H]
 
         # Extract evader features and mask - uniformly handle batch and single samples
-        evader_indices = (obs['types'] == 2)  # [B, N]
+        evader_indices = (obs['current_observation']['types'] == 2)  # [B, N]
 
         # Get the number of positions with type==2 per batch
         num_evaders_per_batch = evader_indices.sum(dim=1)  # [B]
         max_evaders = num_evaders_per_batch.max().item()
 
         # Use masked_select and reshape to handle irregular selections
-        flat_mask = obs['masks'].masked_select(evader_indices)
+        flat_mask = obs['current_observation']['masks'].masked_select(evader_indices)
         flat_features = transformed.masked_select(
             evader_indices.unsqueeze(-1).expand(-1, -1, transformed.size(-1))
         )
 
         # Reshape into regular shape
-        evader_mask = flat_mask.reshape(B, max_evaders)  # [B, max_evaders]
-        evader_features = flat_features.reshape(B, max_evaders, -1)  # [B, max_evaders, H]
+        evader_mask = flat_mask.reshape(batch_size, max_evaders)  # [B, max_evaders]
+        evader_features = flat_features.reshape(batch_size, max_evaders, -1)  # [B, max_evaders, H]
 
         # Apply target selection module
         enhanced_features, attention_weights = self.target_selection(
@@ -475,9 +620,6 @@ class TERL_add_temporal(nn.Module):
             evader_features,
             evader_mask
         )
-
-        # Store attention weights for visualization
-        self._last_target_weights = attention_weights
 
 
         return enhanced_features
@@ -504,14 +646,14 @@ class TERL_add_temporal(nn.Module):
         return cos, taus
 
     def forward(self,
-                obs: Dict[str, torch.Tensor],
+                obs: Dict[str, Dict],
                 num_tau: int = 8,
                 cvar: float = 1.0) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward propagation
 
         Args:
-            obs: Observation data dictionary
+            obs: Observation data dictionary（包含当前的current_observation和缓存信息cache_observation）
             num_tau: Number of tau samples
             cvar: CVaR parameter
 
@@ -521,7 +663,8 @@ class TERL_add_temporal(nn.Module):
                 - taus: [batch_size, num_tau, 1]
         """
         self._validate_input(obs)
-        batch_size = obs['self'].shape[0]
+        batch_size = obs["current_observation"]['self'].shape[0]
+
 
         # Transformer encoding of observations
         #1.实体编码：返回增强特征+Transformer特征+全局掩码+Self原始位置
@@ -542,13 +685,6 @@ class TERL_add_temporal(nn.Module):
         quantiles = self.output_layer(features)
 
         return quantiles.view(batch_size, num_tau, -1), taus
-
-    def get_attention_weights(self) -> Dict[str, torch.Tensor]:
-        """Get the attention weights from the last forward pass"""
-        return {
-            'target_selection': self._last_target_weights,
-            'transformer': self._last_transformer_weights
-        }
 
     def count_parameters(self) -> int:
         """Count the number of model parameters"""

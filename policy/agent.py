@@ -355,14 +355,12 @@ class Agent:
 
         self.optimizer.zero_grad()
         # Get max predicted Q values (for next states) from target model
-        self.policy_target.reset_history_cache()
         Q_targets_next, _ = self.policy_target(next_states)
         Q_targets_next = Q_targets_next.detach().max(2)[0].unsqueeze(1)  # (batch_size, 1, N)
 
         # Compute Q targets for current states
         Q_targets = rewards.unsqueeze(-1) + (self.GAMMA * Q_targets_next * (1. - dones.unsqueeze(-1)))
         # Get expected Q values from local model
-        self.policy_local.reset_history_cache()
         Q_expected, taus = self.policy_local(states)
         Q_expected = Q_expected.gather(2, actions.unsqueeze(-1).expand(self.BATCH_SIZE, 8, 1))
 
