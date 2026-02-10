@@ -359,7 +359,7 @@ class TERL_add_temporal(nn.Module):
             nn.ReLU(),
             nn.Linear(self.hidden_dim//2, self.hidden_dim),
             nn.LayerNorm(self.hidden_dim)
-        ).to(self.device)
+        )
 
         # Transformer encoder
         encoder_layer = nn.TransformerEncoderLayer(
@@ -437,6 +437,50 @@ class TERL_add_temporal(nn.Module):
         N_evader = cached_observation[1]["evaders"].shape[1]  # 邻居数量（以当前帧为准，保证多帧一致）
         N_obstacle = cached_observation[1]["obstacles"].shape[1]  # 邻居数量（以当前帧为准，保证多帧一致）
         n_hist = TERLAddTemporalConfig.n_history  # 历史帧数：5帧
+
+        # def normalize_angle(angle):
+        #     """角度归一化到[-π, π]"""
+        #     return torch.atan2(torch.sin(angle), torch.cos(angle))
+
+        # def get_theta_nearest_from_obstacles(obstacle_feat, perception_radius):
+        #     """
+        #     从障碍物特征中推导theta_nearest（最近障碍物的角度），并标记是否有障碍物
+        #     :param obstacle_feat: [B,N_obs,5] → [p_x,p_y,r,d,θ]（d=障碍物到ego的距离，θ=相对角度）
+        #     :param perception_radius: 标量 → ego的感知半径（无障碍物时d_nearest=该值）
+        #     :return: 
+        #         - has_obstacle: [B] → bool，是否有障碍物（d < perception_radius）
+        #         - theta_nearest: [B] → 最近障碍物的角度（无障碍物时设为0）
+        #         - min_d_obstacle: [B] → 最近障碍物的距离（无障碍物时设为perception_radius）
+        #     """
+        #     B = obstacle_feat.shape[0]
+        #     device = obstacle_feat.device
+        #     perception_radius = torch.tensor(perception_radius, device=device)
+            
+        #     # 提取障碍物的d和θ
+        #     d_obs = obstacle_feat[:, :, 3]  # [B,N_obs] → 障碍物到ego的距离
+        #     theta_obs = obstacle_feat[:, :, 4]  # [B,N_obs] → 障碍物相对角度
+            
+        #     # 1. 找到每个批次的最近障碍物距离
+        #     min_d_obstacle, min_d_idx = torch.min(d_obs, dim=1)  # [B], [B]
+            
+        #     # 2. 判断是否有有效障碍物（距离 < 感知半径）
+        #     has_obstacle = min_d_obstacle < perception_radius  # [B] → bool
+            
+        #     # 3. 提取最近障碍物的角度（无障碍物时设为0）
+        #     theta_nearest = torch.zeros(B, device=device)
+        #     # 仅对有障碍物的批次，提取真实theta_nearest
+        #     theta_nearest[has_obstacle] = theta_obs[
+        #         torch.arange(B)[has_obstacle], 
+        #         min_d_idx[has_obstacle]
+        #     ]
+        #     theta_nearest = normalize_angle(theta_nearest)  # 归一化
+            
+        #     # 4. 无障碍物时，min_d_obstacle设为感知半径
+        #     min_d_obstacle[~has_obstacle] = perception_radius
+            
+        #     return has_obstacle, theta_nearest, min_d_obstacle
+        
+        
         
         # 步骤1：初始化对齐后的特征数组（存储6帧对齐后的特征）
         # 每帧邻居特征：拼接pos+vel → (N, 4)，6帧后为(6, N, 4)
@@ -535,6 +579,13 @@ class TERL_add_temporal(nn.Module):
 
         batch_size = obs["current_observation"]['self'].shape[0]
         current_observation = obs['current_observation'] #是当前观测到的信息，是一个字典
+        for key in current_observation.keys():
+            if isinstance(current_observation[key], torch.Tensor):
+                current_observation[key] = current_observation[key].to(self.device)
+        for key in obs['observation_cache'].keys():
+            for sub_key in obs['observation_cache'][key].keys():
+                if isinstance(obs['observation_cache'][key][sub_key], torch.Tensor):
+                    obs['observation_cache'][key][sub_key] = obs['observation_cache'][key][sub_key].to(self.device)
         current_encoded_features = []
         # Encode various entities,编码current_observation的那个信息
         for entity_type, encoder in self.entity_encoders.items():
@@ -733,7 +784,7 @@ class TERL_add_temporal(nn.Module):
              directory: str,
              device: str = 'cpu',
              version: Optional[int] = None,
-             **kwargs) -> 'TERLPolicy':
+             **kwargs) -> "TERL_add_temporal":
         """
         Load the model
 

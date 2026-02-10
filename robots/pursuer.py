@@ -456,4 +456,4 @@ class Pursuer(Robot):
             "observation_cache": self.obs_cache
         }#这里包含了当前和前五帧的信息
 
-        return full_observation_dict, self.collision
+        return full_observation_dict, self.collision #这里返回的是上一时刻的速度和获得的信息
