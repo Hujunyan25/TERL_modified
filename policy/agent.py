@@ -335,7 +335,14 @@ class Agent:
         Returns:
             float: Training loss.
         """
-        states, actions, rewards, next_states, dones = self.memory.sample().values()
+        batch, weights, indices = self.memory.sample()
+        states, actions, rewards, next_states, dones = (
+            batch['observations'],
+            batch['actions'],
+            batch['rewards'],
+            batch['next_observations'],
+            batch['dones']
+        )
         actions = actions.unsqueeze(-1).long()
         rewards = rewards.unsqueeze(-1).float()
         dones = dones.unsqueeze(-1).float()
