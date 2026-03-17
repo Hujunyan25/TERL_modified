@@ -111,17 +111,6 @@ class Robot:
         # Hydrodynamic property
         self.coefficient_water_resistance = None
 
-    def compute_k(self):
-        """
-        Calculate and update water resistance coefficient based on max speed.
-
-        Raises:
-            ValueError: If max_speed is undefined
-        """
-        if self.max_speed is None:
-            raise ValueError("max_speed must be defined")
-        self.coefficient_water_resistance = np.max(self.a) / self.max_speed
-
     def compute_actions(self):
         """Generate Cartesian product of acceleration and angular velocity options."""
         self.action_list = [(acc, ang_v) for acc in self.a for ang_v in self.w]
@@ -236,7 +225,7 @@ class Robot:
 
         a, w = self.action_list[action]
         # Apply water resistance
-        self.speed += (a - self.coefficient_water_resistance * self.speed) * self.dt
+        self.speed += a * self.dt
         self.speed = np.clip(self.speed, 0.0, self.max_speed)
         self.theta += w * self.dt
         self.theta = self.theta % (2 * np.pi)
@@ -265,23 +254,6 @@ class Robot:
         else:
             distance = np.sqrt((self.x - x) ** 2 + (self.y - y) ** 2) - r - self.r
         return distance
-
-    def check_detection(self, entities_x, entities_y, entities_r):
-        """
-        Verify entity is within sensor range and FOV.
-
-        Returns:
-            bool: Detection success status
-        """
-        projected_position = self.project_to_robot_frame(np.array([entities_x, entities_y]), is_vector=False)
-        if np.linalg.norm(projected_position) > self.perception.range + entities_r:
-            return False
-
-        angle = np.arctan2(projected_position[1], projected_position[0])
-        if angle < -0.5 * self.perception.angle or angle > 0.5 * self.perception.angle:
-            return False
-
-        return True
 
     def project_to_robot_frame(self, array: np.ndarray, is_vector: bool = True) -> np.ndarray:
         """

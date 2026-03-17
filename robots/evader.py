@@ -33,10 +33,9 @@ class Evader(Robot):
         self.perception = Perception(is_evader=True)  # Override perception in subclass
 
         # Precomputed values
-        self.compute_k()  # Calculate and update water resistance coefficient
         self.compute_actions()  # Calculate and update action list
 
-    def perception_output(self, obstacles, pursuers, evaders, in_robot_frame=True):
+    def perception_output(self, obstacles, pursuers, in_robot_frame=True):
         """
         Process the evader's perception of obstacles, pursuers, and other evaders in the environment.
 
@@ -61,7 +60,6 @@ class Evader(Robot):
         self.perception.observation["self"].clear()
         self.perception.observation["statics"].clear()
         self.perception.observation["pursuers"].clear()
-        self.perception.observation["evaders"].clear()
 
         # Clear recorded index lists
         self.perception.observed_pursuers.clear()
@@ -80,8 +78,6 @@ class Evader(Robot):
 
         # Static obstacle perception
         for i, obstacle in enumerate(obstacles):
-            if not self.check_detection(obstacle.x, obstacle.y, obstacle.r):
-                continue  # Skip if obstacle is out of perception range
 
             # Record observed obstacle
             self.perception.observed_obstacles.append(i)
@@ -100,8 +96,6 @@ class Evader(Robot):
         for j, pursuer in enumerate(pursuers):
             if pursuer.deactivated:
                 continue  # Skip deactivated pursuers
-            if not self.check_detection(pursuer.x, pursuer.y, pursuer.detect_r):
-                continue  # Skip pursuers out of detection range
 
             # Record observed pursuer by ID (different from obstacle indexing which uses position in list)
             self.perception.observed_pursuers.append(pursuer.id)
@@ -118,33 +112,10 @@ class Evader(Robot):
                 self.perception.observation["pursuers"].append(
                     [pursuer.x, pursuer.y, pursuer.velocity[0], pursuer.velocity[1]])
 
-        # Other evaders perception
-        for evader in evaders:
-            if evader is self:
-                continue  # Skip self
-            if evader.deactivated:
-                continue  # Skip deactivated evaders
-            if not self.check_detection(evader.x, evader.y, evader.detect_r):
-                continue  # Skip evaders out of detection range
-
-            self.perception.observed_evaders.append(evader.id)
-
-            if not self.collision:
-                self.check_collision(evader.x, evader.y, evader.r)  # Check collision with other evader
-
-            if in_robot_frame:
-                position_robot_frame = self.project_to_robot_frame(np.array([evader.x, evader.y]), is_vector=False)
-                v_r = self.project_to_robot_frame(evader.velocity)
-                new_evader_observation = list(np.concatenate((position_robot_frame, v_r)))
-                self.perception.observation["evaders"].append(new_evader_observation)
-            else:
-                self.perception.observation["evaders"].append(
-                    [evader.x, evader.y, evader.velocity[0], evader.velocity[1]])
 
         # Process perception data
         self_state = copy.deepcopy(self.perception.observation["self"])
         static_observations = self.copy_sort(self.perception.max_obstacle_num, "statics", in_robot_frame)
         pursuer_observations = self.copy_sort(self.perception.max_pursuer_num, "pursuers", in_robot_frame)
-        evader_observations = self.copy_sort(self.perception.max_evader_num, "evaders", in_robot_frame)
 
-        return self_state + static_observations + pursuer_observations + evader_observations, self.collision
+        return self_state + static_observations + pursuer_observations, self.collision

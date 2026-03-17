@@ -183,7 +183,7 @@ class TERLPolicy(nn.Module):
         )
 
         # Add target selection module
-        self.target_selection = TargetSelectionModule(self.hidden_dim)
+        # self.target_selection = TargetSelectionModule(self.hidden_dim)
 
         # IQN related layers
         self.cos_embedding = nn.Linear(self.n, self.hidden_dim)
@@ -194,7 +194,7 @@ class TERLPolicy(nn.Module):
         self.layer_norm = nn.LayerNorm(self.hidden_dim)
 
         # Initialize weights
-        # self._init_weights()
+        self._init_weights()
 
         # Move model to specified device
         self.to(self.device)
@@ -202,6 +202,13 @@ class TERLPolicy(nn.Module):
         # For storing the last attention weights
         self._last_target_weights = None
         self._last_transformer_weights = None
+        
+        # 新增：2H→H的维度映射层（核心修改）
+        self.feature_compress = nn.Sequential(
+            nn.Linear(2 * self.hidden_dim, self.hidden_dim),  # 512→256
+            nn.LayerNorm(self.hidden_dim),  # 可选，提升训练稳定性
+            nn.ReLU()  # 可选，增加非线性表达
+        )
 
     def _init_weights(self):
         """Initialize network weights"""
@@ -280,35 +287,38 @@ class TERLPolicy(nn.Module):
         global_feature = torch.max(transformed, dim=1).values  # [B, H]
 
         enhanced_feature = torch.cat([self_feature, global_feature], dim=-1)  # [B, 2H]
+        feature_compress = self.feature_compress(enhanced_feature)
 
-        # Extract evader features and mask - uniformly handle batch and single samples
-        evader_indices = (obs['types'] == 2)  # [B, N]
 
-        # Get the number of positions with type==2 per batch
-        num_evaders_per_batch = evader_indices.sum(dim=1)  # [B]
-        max_evaders = num_evaders_per_batch.max().item()
 
-        # Use masked_select and reshape to handle irregular selections
-        flat_mask = obs['masks'].masked_select(evader_indices)
-        flat_features = transformed.masked_select(
-            evader_indices.unsqueeze(-1).expand(-1, -1, transformed.size(-1))
-        )
+        # # Extract evader features and mask - uniformly handle batch and single samples
+        # evader_indices = (obs['types'] == 2)  # [B, N]
 
-        # Reshape into regular shape
-        evader_mask = flat_mask.reshape(B, max_evaders)  # [B, max_evaders]
-        evader_features = flat_features.reshape(B, max_evaders, -1)  # [B, max_evaders, H]
+        # # Get the number of positions with type==2 per batch
+        # num_evaders_per_batch = evader_indices.sum(dim=1)  # [B]
+        # max_evaders = num_evaders_per_batch.max().item()
 
-        # Apply target selection module
-        enhanced_features, attention_weights = self.target_selection(
-            enhanced_feature,
-            evader_features,
-            evader_mask
-        )
+        # # Use masked_select and reshape to handle irregular selections
+        # flat_mask = obs['masks'].masked_select(evader_indices)
+        # flat_features = transformed.masked_select(
+        #     evader_indices.unsqueeze(-1).expand(-1, -1, transformed.size(-1))
+        # )
+
+        # # Reshape into regular shape
+        # evader_mask = flat_mask.reshape(B, max_evaders)  # [B, max_evaders]
+        # evader_features = flat_features.reshape(B, max_evaders, -1)  # [B, max_evaders, H]
+
+        # # Apply target selection module
+        # enhanced_features, attention_weights = self.target_selection(
+        #     enhanced_feature,
+        #     evader_features,
+        #     evader_mask
+        # )
 
         # Store attention weights for visualization
-        self._last_target_weights = attention_weights
+        # self._last_target_weights = attention_weights
 
-        return enhanced_features
+        return feature_compress
 
     def calc_cos(self, batch_size: int, num_tau: int = 8, cvar: float = 1.0) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -368,12 +378,12 @@ class TERLPolicy(nn.Module):
 
         return quantiles.view(batch_size, num_tau, -1), taus
 
-    def get_attention_weights(self) -> Dict[str, torch.Tensor]:
-        """Get the attention weights from the last forward pass"""
-        return {
-            'target_selection': self._last_target_weights,
-            'transformer': self._last_transformer_weights
-        }
+    # def get_attention_weights(self) -> Dict[str, torch.Tensor]:
+    #     """Get the attention weights from the last forward pass"""
+    #     return {
+    #         'target_selection': self._last_target_weights,
+    #         'transformer': self._last_transformer_weights
+    #     }
 
     def count_parameters(self) -> int:
         """Count the number of model parameters"""

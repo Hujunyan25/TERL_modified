@@ -54,12 +54,11 @@ class Pursuer(Robot):
         self.angle_capture = np.pi  # Minimum encirclement angle required for capture
 
         # Precomputed values
-        self.compute_k()  # Compute and update water resistance coefficient
         self.compute_actions()  # Compute and update action list
 
         self.num_self_state = 4
-        self.num_static_state = 25
-        self.num_pursuer_state = 35
+        self.num_static_state = 10
+        self.num_pursuer_state = 21
         self.num_evader_state = 7 * self.perception.max_evader_num
 
         self.num_self_feature = 4
@@ -112,14 +111,12 @@ class Pursuer(Robot):
         # Configuration parameters
         MAX_ANGLE_GAP = np.pi  # Maximum allowable angle gap (180 degrees)
         MAX_ANGLE_RATIO = 3.0  # Maximum angle should not exceed 3 times the minimum angle
-        MIN_PURSUERS = 2  # Minimum number of pursuers required besides itself (at least 3 in total)
+        MIN_PURSUERS = 3  # Minimum number of pursuers required besides itself (at least 3 in total)
 
         self_position = np.array([self.x, self.y])
 
         # Check each evader
         for evader in evaders:
-            if evader.deactivated:
-                continue
 
             evader_position = np.array([evader.x, evader.y])
 
@@ -153,6 +150,19 @@ class Pursuer(Robot):
                 for p in involved_pursuers
             ]
             pursuer_angles.sort()
+
+            # ideal_angle = 2 * np.pi / len(involved_pursuers)
+            # avg_adjacent = np.mean(pursuer_angles)
+            # avg_diff = abs(avg_adjacent - ideal_angle)
+            # avg_ok = avg_diff <= np.pi * 2 / len(pursuers)
+            # #每个夹角与理想值的偏差
+            # single_diffs = [abs(ang - ideal_angle) for ang in adjacent_angles]
+            # max_single_diffs = max(single_diffs)
+            # single_ok = max_single_diffs <= np.pi * 2 / 18
+
+            # is_encircled = avg_diff and single_ok
+            # if not is_encircled:
+            #     continue
 
             # Compute angles between adjacent pursuers
             adjacent_angles = [
@@ -265,10 +275,8 @@ class Pursuer(Robot):
                 distances = np.linalg.norm(obstacle_positions - self_position, axis=1)  # Shape: (num_obstacles,)
 
                 # Find nearest obstacle distance, return perception range if beyond detection
-                min_distance = np.min(distances) if np.any(distances < self.perception.range) else self.perception.range
-            else:
-                # Return max perception range when no obstacles
-                min_distance = self.perception.range
+                min_distance = np.min(distances)
+
             self.perception.observation["self"] = list(abs_velocity_r) + [min_distance] + [self.is_pursuing]
             self.perception.observation['masks'].append(True)
             assert len(self.perception.observation["self"]) == self.num_self_state
@@ -278,9 +286,6 @@ class Pursuer(Robot):
             if pursuer is self:
                 continue
             if pursuer.deactivated:
-                continue
-
-            if not self.check_detection(pursuer.x, pursuer.y, pursuer.detect_r):
                 continue
 
             self.perception.observed_pursuers.append(pursuer)
@@ -331,8 +336,6 @@ class Pursuer(Robot):
 
         # Static obstacle perception
         for i, obs in enumerate(obstacles):
-            if not self.check_detection(obs.x, obs.y, obs.r):
-                continue
 
             self.perception.observed_obstacles.append(i)
 

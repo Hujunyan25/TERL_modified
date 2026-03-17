@@ -33,11 +33,10 @@ class Perception:
             is_evader (bool): Whether it is an evader. If it is an evader, set a specific perception format.
         """
         self.perception_config = ConfigManager.get_instance()
-        self.range = 20.0  # Perception range (meters)
         self.angle = 2 * np.pi  # Perception angle range (radians)
-        self.max_obstacle_num = 5  # Maximum number of obstacles considered
-        self.max_pursuer_num = 5  # Maximum number of pursuers considered
-        self.max_evader_num = self.perception_config.get("perception.max_evader_num") if not is_evader else 5 # Maximum number of evaders considered
+        self.max_obstacle_num = 2  # Maximum number of obstacles considered
+        self.max_pursuer_num = 3  # Maximum number of pursuers considered
+        self.max_evader_num = self.perception_config.get("perception.max_evader_num") if not is_evader else 0 # Maximum number of evaders considered
         self.observation = self.observation_format(is_evader)
         self.observed_obstacles = []  # List of indices of observed obstacles
         self.observed_pursuers = []  # List of indices of observed pursuers
@@ -54,6 +53,6 @@ class Perception:
             dict: Perception format dictionary containing information about itself, static objects, pursuers, and evaders.
         """
         if is_evader:
-            return dict(self=[], statics=[], pursuers=[], evaders=[])
+            return dict(self=[], statics=[], pursuers=[])
         else:
-            return dict(self=[], pursuers=[], evaders=[], statics=[], masks=[], types=[])
+            return dict(self=[], pursuers=[], evaders=[], masks=[], statics=[], types=[])

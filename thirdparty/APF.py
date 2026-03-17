@@ -168,17 +168,17 @@ class ApfAgent:
         Args:
             observation (list): Observation vector of length 59, containing:
                 - [0:4]: Self state (x, y, theta, speed)
-                - [4:19]: Static obstacle states (x, y, radius) * 5
-                - [19:]: Dynamic obstacle states (x, y, vx, vy) * 10
+                - [4:10]: Static obstacle states (x, y, radius) * 2
+                - [10:]: Dynamic obstacle states (x, y, vx, vy) * 10
 
         Returns:
             int: Selected action index, representing the (acceleration, angular_velocity) combination.
         """
-        assert len(observation) == 59, "The state size does not equal 59"
+        # assert len(observation) == 59, "The state size does not equal 59"
 
         obs_array = np.array(observation)
         static_start_idx = 4
-        dynamic_start_idx = 19
+        dynamic_start_idx = 10
 
         # Extract observation data
         ego = obs_array[:static_start_idx]

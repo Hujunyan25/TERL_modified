@@ -19,31 +19,6 @@ from robots.pursuer import Pursuer
 from utils import logger as logger
 
 
-class Core:
-    """
-    Initialize a vortex core object.
-
-    Attributes:
-        x (np.ndarray): X-coordinates of vortex core.
-        y (np.ndarray): Y-coordinates of vortex core.
-        clockwise (bool): Vortex rotation direction (True for clockwise).
-        Gamma (float): Circulation strength of vortex core.
-    """
-
-    def __init__(self, x: np.ndarray[Any, np.dtype[np.float64]], y: np.ndarray[Any, np.dtype[np.float64]],
-                 clockwise: bool, gamma: float):
-        """
-        Args:
-            x (np.ndarray): X-coordinates of vortex core.
-            y (np.ndarray): Y-coordinates of vortex core.
-            clockwise (bool): Vortex rotation direction.
-            gamma (float): Circulation strength of vortex core.
-        """
-        self.x = x  # x coordinate of the vortex core
-        self.y = y  # y coordinate of the vortex core
-        self.clockwise = clockwise  # if the vortex direction is clockwise
-        self.Gamma = gamma  # circulation strength of the vortex core
-
 
 class Obstacle:
     """
@@ -125,11 +100,6 @@ class MarineEnv(gym.Env):
         self.width = self.config_env.get("env.width", default=100)  # x-axis dimension
         self.height = self.config_env.get("env.height", default=100)  # y-axis dimension
         self.arena_size = self.width
-        # Vortex parameters
-        self.vortex_core_radius = 0.5  # vortex core radius
-        self.v_rel_max = 1.0  # max relative velocity between opposing currents
-        self.p = 0.8  # max allowed relative velocity between vortex cores
-        self.v_range = [5, 10]  # velocity range at vortex edge
 
         # Obstacle parameters
         self.obs_r_range = self.config_env.get("env.obs_r_range", default=[1.0, 1.0])  # obstacle radius range
@@ -161,7 +131,6 @@ class MarineEnv(gym.Env):
         self.related_distance = self.config_env.get("env.related_distance", default=18.0)  # cooperation initiation distance
 
         # Entity counts
-        self.num_cores = 8  # number of vortex cores
         self.num_obs = 8  # number of obstacles
         self.num_pursuers = 1  # number of pursuers
         self.num_evaders = 1  # number of evaders
@@ -173,8 +142,6 @@ class MarineEnv(gym.Env):
         self.evaders.append(Evader(0))
 
         # Environment parameters
-        self.cores: List[Core] = []  # vortex core list
-        self.core_centers = None
         self.obstacles: List[Obstacle] = []  # obstacle list
 
         # Curriculum learning parameters
@@ -218,21 +185,18 @@ class MarineEnv(gym.Env):
 
             self.num_pursuers = self.schedule["num_pursuers"][idx]
             self.num_evaders = self.schedule["num_evaders"][idx]
-            self.num_cores = self.schedule["num_cores"][idx]
             self.num_obs = self.schedule["num_obstacles"][idx]
             self.min_pursuer_evader_init_dis = self.schedule["min_pursuer_evader_init_dis"][idx]
 
             logger.info(f"Process {os.getpid()} ======== training schedule ========")
             logger.info(f"Process {os.getpid()} num of pursuers: {self.num_pursuers}")
             logger.info(f"Process {os.getpid()} num of evaders: {self.num_evaders}")
-            logger.info(f"Process {os.getpid()} num of cores: {self.num_cores}")
             logger.info(f"Process {os.getpid()} num of obstacles: {self.num_obs}")
             logger.info(f"Process {os.getpid()} min pursuer_start goal dis: {self.min_pursuer_evader_init_dis}")
             logger.info(f"Process {os.getpid()} ======== training schedule ========\n")
 
         self.episode_time_steps = 0
 
-        self.cores.clear()
         self.obstacles.clear()
         self.pursuers.clear()
         self.evaders.clear()
@@ -279,41 +243,6 @@ class MarineEnv(gym.Env):
                     logger.error("Failed to generate required number of pursuers🥲!")
                     sys.exit("-1 at code:reset, MarineEnv, line 322. Failed to generate required number of pursuers🥲!")
 
-        # Generate vortex cores
-        num_cores = self.num_cores
-        if num_cores > 0:
-            iteration = 8000
-            while True:
-                # Random vortex core center
-                center = self.rd.uniform(low=np.zeros(2), high=np.array([self.width, self.height]))
-                # Random rotation direction
-                direction = self.rd.binomial(1, 0.5)
-                # Reduced intensity parameters
-                v_edge = self.rd.uniform(low=self.v_range[0] * 0.5, high=self.v_range[1] * 0.5)
-                gamma = 2 * np.pi * (self.vortex_core_radius * 0.5) * v_edge
-                core = Core(center[0], center[1], bool(direction), gamma)
-                iteration -= 1
-                if self.check_core(core):
-                    self.cores.append(core)
-                    num_cores -= 1
-                if iteration == 0 or num_cores == 0:
-                    if len(self.cores) == self.num_cores:
-                        break
-                    else:
-                        logger.error(f"Failed to generate required number of {len(self.cores)}/{self.num_cores} cores🥲!")
-                        sys.exit("-1 at code:reset, MarineEnv, line 347. Failed to generate required number of cores🥲!")
-
-        centers = None
-        for core in self.cores:
-            if centers is None:
-                centers = np.array([[core.x, core.y]])
-            else:
-                c = np.array([[core.x, core.y]])
-                centers = np.vstack((centers, c))
-
-        # Store core positions in KDTree
-        if centers is not None:
-            self.core_centers = KDTree(centers)
 
         # Generate obstacles
         num_obs = self.num_obs
@@ -390,7 +319,8 @@ class MarineEnv(gym.Env):
         rob.deactivated = False
         rob.init_theta = self.rd.uniform(low=0.0, high=2 * np.pi)
         rob.init_speed = self.rd.uniform(low=0.0, high=rob.max_speed)
-        current_v = self.get_current_velocity(rob.start[0], rob.start[1])
+        # current_v = self.get_current_velocity(rob.start[0], rob.start[1])
+        current_v = np.array((0, 0), dtype = np.float64)
         rob.reset_state(current_velocity=current_v)
 
     def check_all_pursuers_deactivated(self) -> bool:
@@ -803,7 +733,8 @@ class MarineEnv(gym.Env):
             rob_action (int): Action index to execute
         """
         for _ in range(rob.N):
-            current_velocity = self.get_current_velocity(rob.x, rob.y)
+            # current_velocity = self.get_current_velocity(rob.x, rob.y)
+            current_velocity = np.array((0,0), dtype=np.float64)
             rob.update_state(rob_action, current_velocity)
 
     def compute_capture_reward_factor(self, capture_angles: List[float], pursuer_count: int) -> float:
@@ -876,7 +807,6 @@ class MarineEnv(gym.Env):
         for evader in self.evaders:
             observation, collision = evader.perception_output(obstacles=self.obstacles,
                                                               pursuers=self.pursuers,
-                                                              evaders=self.evaders,
                                                               in_robot_frame=self.observation_in_robot_frame)
             observations.append(observation)
             collisions.append(collision)
@@ -1020,56 +950,6 @@ class MarineEnv(gym.Env):
 
         return True
 
-    def check_core(self, core_j: Core) -> bool:
-        """
-        Validate vortex core position.
-
-        Ensures the vortex core is within map boundaries and doesn't overlap with:
-        - Other vortex cores
-        - Obstacles
-        - Robot starting positions
-
-        Args:
-            core_j (Core): Vortex core instance to validate
-
-        Returns:
-            bool: True if position is valid, False otherwise
-        """
-        # Check map boundaries
-        if core_j.x - self.vortex_core_radius < 0.0 or core_j.x + self.vortex_core_radius > self.width:
-            return False
-        if core_j.y - self.vortex_core_radius < 0.0 or core_j.y + self.vortex_core_radius > self.height:
-            return False
-
-        # Check distance to robot start positions
-        for rob in self.pursuers + self.evaders:
-            core_pos = np.array([core_j.x, core_j.y])
-            dis_s = core_pos - rob.start
-            if np.linalg.norm(dis_s) < self.vortex_core_radius + self.clear_r:
-                return False
-
-        # Check interactions with other vortex cores
-        for core_i in self.cores:
-            dx = core_i.x - core_j.x
-            dy = core_i.y - core_j.y
-            dis = np.sqrt(dx * dx + dy * dy)
-
-            if core_i.clockwise == core_j.clockwise:
-                # Same rotation direction - validate boundary speeds
-                boundary_i = core_i.Gamma / (2 * np.pi * self.v_rel_max)
-                boundary_j = core_j.Gamma / (2 * np.pi * self.v_rel_max)
-                if dis < boundary_i + boundary_j:
-                    return False
-            else:
-                # Opposite rotation - validate velocity ratios
-                gamma_l = max(core_i.Gamma, core_j.Gamma)
-                gamma_s = min(core_i.Gamma, core_j.Gamma)
-                v_1 = gamma_l / (2 * np.pi * (dis - 2 * self.vortex_core_radius))
-                v_2 = gamma_s / (2 * np.pi * self.vortex_core_radius)
-                if v_1 > self.p * v_2:
-                    return False
-
-        return True
 
     def check_obstacle(self, obs: Obstacle) -> bool:
         """
@@ -1101,13 +981,6 @@ class MarineEnv(gym.Env):
 
         min_obstructions_dis = 5  # Minimum separation distance
 
-        # Check distance to vortex cores
-        for core in self.cores:
-            dx = core.x - obs.x
-            dy = core.y - obs.y
-            dis = np.sqrt(dx * dx + dy * dy)
-            if dis <= self.vortex_core_radius + obs.r + min_obstructions_dis:
-                return False
 
         # Check distance to other obstacles
         for obstacle in self.obstacles:
@@ -1119,74 +992,54 @@ class MarineEnv(gym.Env):
 
         return True
 
-    def get_current_velocity(self, x: float, y: float) -> np.ndarray:
-        """
-        Calculate ocean current velocity at specified coordinates.
+    # def get_current_velocity(self, x: float, y: float) -> np.ndarray:
+    #     """
+    #     Calculate ocean current velocity at specified coordinates.
 
-        Computes cumulative velocity from all vortex cores considering:
-        - Distance from each core
-        - Rotation direction (clockwise/counter-clockwise)
-        - Circulation strength (Gamma)
+    #     Computes cumulative velocity from all vortex cores considering:
+    #     - Distance from each core
+    #     - Rotation direction (clockwise/counter-clockwise)
+    #     - Circulation strength (Gamma)
 
-        Args:
-            x (float): X-coordinate
-            y (float): Y-coordinate
+    #     Args:
+    #         x (float): X-coordinate
+    #         y (float): Y-coordinate
 
-        Returns:
-            np.ndarray: Current velocity vector [vx, vy]
-        """
-        if len(self.cores) == 0:
-            return np.zeros(2)
+    #     Returns:
+    #         np.ndarray: Current velocity vector [vx, vy]
+    #     """
+    #     if len(self.cores) == 0:
+    #         return np.zeros(2)
 
-        # Query nearest vortex cores
-        d, idx = self.core_centers.query(np.array([x, y]), k=len(self.cores))
-        if isinstance(idx, np.int64):
-            idx = [idx]
+    #     # Query nearest vortex cores
+    #     d, idx = self.core_centers.query(np.array([x, y]), k=len(self.cores))
+    #     if isinstance(idx, np.int64):
+    #         idx = [idx]
 
-        v_radial_set = []
-        v_velocity = np.zeros((2, 1))
-        for i in list(idx):
-            core = self.cores[i]
-            v_radial = np.array([[core.x - x], [core.y - y]])
+    #     v_radial_set = []
+    #     v_velocity = np.zeros((2, 1))
 
-            # Avoid duplicate contributions
-            for v in v_radial_set:
-                project = np.transpose(v) @ v_radial
-                if project[0, 0] > 0:
-                    continue
+    #     return np.array([v_velocity[0, 0], v_velocity[1, 0]])
 
-            v_radial_set.append(v_radial)
-            dis = np.linalg.norm(v_radial)
-            v_radial /= dis
-            if core.clockwise:
-                rotation = np.array([[0., -1.], [1., 0.]])
-            else:
-                rotation = np.array([[0., 1.], [-1., 0.]])
-            v_tangent = rotation @ v_radial
-            speed = self.compute_speed(core.Gamma, float(dis))
-            v_velocity += v_tangent * speed
+    # def compute_speed(self, gamma: float, d: float) -> float:
+    #     """
+    #     Calculate tangential velocity at distance d from vortex core.
 
-        return np.array([v_velocity[0, 0], v_velocity[1, 0]])
+    #     Velocity profile:
+    #     - Linear increase within core radius
+    #     - Inverse relationship beyond core radius
 
-    def compute_speed(self, gamma: float, d: float) -> float:
-        """
-        Calculate tangential velocity at distance d from vortex core.
+    #     Args:
+    #         gamma (float): Circulation strength
+    #         d (float): Distance from core center
 
-        Velocity profile:
-        - Linear increase within core radius
-        - Inverse relationship beyond core radius
-
-        Args:
-            gamma (float): Circulation strength
-            d (float): Distance from core center
-
-        Returns:
-            float: Tangential velocity magnitude
-        """
-        if d <= self.vortex_core_radius:
-            return gamma / (2 * np.pi * self.vortex_core_radius * self.vortex_core_radius) * d
-        else:
-            return gamma / (2 * np.pi * d)
+    #     Returns:
+    #         float: Tangential velocity magnitude
+    #     """
+    #     if d <= self.vortex_core_radius:
+    #         return gamma / (2 * np.pi * self.vortex_core_radius * self.vortex_core_radius) * d
+    #     else:
+    #         return gamma / (2 * np.pi * d)
 
     def reset_with_eval_config(self, eval_config: dict):
         """
@@ -1212,10 +1065,6 @@ class MarineEnv(gym.Env):
         self.sd = env_config["seed"]
         self.width = env_config["width"]
         self.height = env_config["height"]
-        self.vortex_core_radius = env_config["vortex_core_radius"]
-        self.v_rel_max = env_config["v_rel_max"]
-        self.p = env_config["p"]
-        self.v_range = copy.deepcopy(env_config["v_range"])
         self.obs_r_range = copy.deepcopy(env_config["obs_r_range"])
         self.clear_r = env_config["clear_r"]
         self.min_pursuer_evader_init_dis = env_config["min_pursuer_evader_init_dis"]
@@ -1223,23 +1072,6 @@ class MarineEnv(gym.Env):
         self.collision_penalty = env_config["collision_penalty"]
         self.goal_reward = env_config["goal_reward"]
 
-        # Initialize vortex cores
-        self.cores.clear()
-        centers = None
-        for i in range(len(env_config["cores"]["positions"])):
-            center = env_config["cores"]["positions"][i]
-            clockwise = env_config["cores"]["clockwise"][i]
-            gamma = env_config["cores"]["Gamma"][i]
-            core = Core(center[0], center[1], clockwise, gamma)
-            self.cores.append(core)
-            if centers is None:
-                centers = np.array([[core.x, core.y]])
-            else:
-                c = np.array([[core.x, core.y]])
-                centers = np.vstack((centers, c))
-
-        if centers is not None:
-            self.core_centers = KDTree(centers)
 
         # Initialize obstacles
         self.obstacles.clear()
@@ -1264,7 +1096,6 @@ class MarineEnv(gym.Env):
             pursuer.detect_r = eval_config["pursuers"]["detect_r"][i]
             pursuer.a = np.array(eval_config["pursuers"]["a"][i])
             pursuer.w = np.array(eval_config["pursuers"]["w"][i])
-            pursuer.perception.range = eval_config["pursuers"]["perception"]["range"][i]
             pursuer.perception.angle = eval_config["pursuers"]["perception"]["angle"][i]
             pursuer.max_speed = eval_config["pursuers"]["max_speed"][i]
             pursuer.start = tuple(eval_config["pursuers"]["start"][i])
@@ -1273,9 +1104,8 @@ class MarineEnv(gym.Env):
             pursuer.distance_capture = eval_config["pursuers"]["distance_capture"][i]
             pursuer.angle_capture = eval_config["pursuers"]["angle_capture"][i]
             # Initialize dynamics
-            pursuer.compute_k()
             pursuer.compute_actions()
-            current_v = self.get_current_velocity(float(pursuer.start[0]), float(pursuer.start[1]))
+            # current_v = self.get_current_velocity(float(pursuer.start[0]), float(pursuer.start[1]))
             pursuer.reset_state(current_velocity=current_v)
             self.pursuers.append(pursuer)
 
@@ -1294,16 +1124,15 @@ class MarineEnv(gym.Env):
             evader.detect_r = eval_config["evaders"]["detect_r"][i]
             evader.a = np.array(eval_config["evaders"]["a"][i])
             evader.w = np.array(eval_config["evaders"]["w"][i])
-            evader.perception.range = eval_config["evaders"]["perception"]["range"][i]
             evader.perception.angle = eval_config["evaders"]["perception"]["angle"][i]
             evader.max_speed = eval_config["evaders"]["max_speed"][i]
             evader.start = tuple(eval_config["evaders"]["start"][i])
             evader.init_theta = eval_config["evaders"]["init_theta"][i]
             evader.init_speed = eval_config["evaders"]["init_speed"][i]
             # Initialize dynamics
-            evader.compute_k()
             evader.compute_actions()
-            current_v = self.get_current_velocity(float(evader.start[0]), float(evader.start[1]))
+            # current_v = self.get_current_velocity(float(evader.start[0]), float(evader.start[1]))
+            current_v = np.array((0, 0), dtype = np.float64)
             evader.reset_state(current_velocity=current_v)
             self.evaders.append(evader)
 
@@ -1333,10 +1162,6 @@ class MarineEnv(gym.Env):
         episode["env"]["seed"] = self.sd
         episode["env"]["width"] = self.width
         episode["env"]["height"] = self.height
-        episode["env"]["vortex_core_radius"] = self.vortex_core_radius
-        episode["env"]["v_rel_max"] = self.v_rel_max
-        episode["env"]["p"] = self.p
-        episode["env"]["v_range"] = copy.deepcopy(self.v_range)
         episode["env"]["obs_r_range"] = copy.deepcopy(self.obs_r_range)
         episode["env"]["clear_r"] = self.clear_r
         episode["env"]["min_pursuer_evader_init_dis"] = self.min_pursuer_evader_init_dis
@@ -1344,15 +1169,6 @@ class MarineEnv(gym.Env):
         episode["env"]["collision_penalty"] = self.collision_penalty
         episode["env"]["goal_reward"] = self.goal_reward
 
-        # Vortex core data
-        episode["env"]["cores"] = {}
-        episode["env"]["cores"]["positions"] = []
-        episode["env"]["cores"]["clockwise"] = []
-        episode["env"]["cores"]["Gamma"] = []
-        for core in self.cores:
-            episode["env"]["cores"]["positions"].append([core.x, core.y])
-            episode["env"]["cores"]["clockwise"].append(core.clockwise)
-            episode["env"]["cores"]["Gamma"].append(core.Gamma)
 
         # Obstacle data
         episode["env"]["obstacles"] = {}
@@ -1376,7 +1192,6 @@ class MarineEnv(gym.Env):
         episode["pursuers"]["a"] = []
         episode["pursuers"]["w"] = []
         episode["pursuers"]["perception"] = {}
-        episode["pursuers"]["perception"]["range"] = []
         episode["pursuers"]["perception"]["angle"] = []
         episode["pursuers"]["perception"]["communication_range"] = []
         episode["pursuers"]["perception"]["communication_angle"] = []
@@ -1403,7 +1218,6 @@ class MarineEnv(gym.Env):
             episode["pursuers"]["detect_r"].append(pursuer.detect_r)
             episode["pursuers"]["a"].append(list(pursuer.a))
             episode["pursuers"]["w"].append(list(pursuer.w))
-            episode["pursuers"]["perception"]["range"].append(pursuer.perception.range)
             episode["pursuers"]["perception"]["angle"].append(pursuer.perception.angle)
             episode["pursuers"]["max_speed"].append(pursuer.max_speed)
             episode["pursuers"]["start"].append(list(pursuer.start))
@@ -1428,7 +1242,6 @@ class MarineEnv(gym.Env):
         episode["evaders"]["a"] = []
         episode["evaders"]["w"] = []
         episode["evaders"]["perception"] = {}
-        episode["evaders"]["perception"]["range"] = []
         episode["evaders"]["perception"]["angle"] = []
         episode["evaders"]["max_speed"] = []
         episode["evaders"]["start"] = []
@@ -1449,7 +1262,6 @@ class MarineEnv(gym.Env):
             episode["evaders"]["detect_r"].append(evader.detect_r)
             episode["evaders"]["a"].append(list(evader.a))
             episode["evaders"]["w"].append(list(evader.w))
-            episode["evaders"]["perception"]["range"].append(evader.perception.range)
             episode["evaders"]["perception"]["angle"].append(evader.perception.angle)
             episode["evaders"]["max_speed"].append(evader.max_speed)
             episode["evaders"]["start"].append(list(evader.start))

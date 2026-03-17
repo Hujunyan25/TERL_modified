@@ -181,7 +181,7 @@ class Agent:
 
             self.optimizer = optim.Adam(self.policy_local.parameters(), lr=self.LR)
 
-            self.memory = ReplayBuffer(BUFFER_SIZE, BATCH_SIZE, device, 5, 8, 5)
+            self.memory = ReplayBuffer(BUFFER_SIZE, BATCH_SIZE, device, 3, 1, 2)
 
     def act_dqn(self, state, eps=0.0, use_eval=True):
         """

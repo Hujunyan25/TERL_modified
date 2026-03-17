@@ -132,7 +132,6 @@ class Trainer:
             for _ in range(num_episode):
                 self.eval_env.num_pursuers = eval_schedule["num_pursuers"][i]
                 self.eval_env.num_evaders = eval_schedule["num_evaders"][i]
-                self.eval_env.num_cores = eval_schedule["num_cores"][i]
                 self.eval_env.num_obs = eval_schedule["num_obstacles"][i]
                 self.eval_env.min_pursuer_evader_init_dis = eval_schedule["min_pursuer_evader_init_dis"][i]
 
