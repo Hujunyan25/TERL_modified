@@ -150,8 +150,8 @@ def run_trial(device, config_file):
         with open(config_file_path, 'w') as file:
             yaml.safe_dump(params, file)
 
-        if wandb.run:
-            wandb.save(config_file_path, base_path=params["save_dir"])
+        # if wandb.run:
+        #     wandb.save(config_file_path, base_path=params["save_dir"])
 
         # Initialize environments
         train_env = MarineEnv(seed=params["seed"], schedule=params["training_schedule"])
@@ -180,8 +180,8 @@ def run_trial(device, config_file):
         )
 
         trainer.save_eval_config(exp_dir)
-        if wandb.run:
-            wandb.save(os.path.join(exp_dir, "eval_config.yaml"), base_path=params["save_dir"])
+        # if wandb.run:
+        #     wandb.save(os.path.join(exp_dir, "eval_config.yaml"), base_path=params["save_dir"])
 
         # Training
         trainer.learn(

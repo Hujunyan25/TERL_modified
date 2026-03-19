@@ -67,7 +67,7 @@ class Robot:
         # Core properties
         self.id = index
         self.robot_type = None  # To be overridden
-        self.dt = 0.05  # Time step duration (s)
+        self.dt = 0.1  # Time step duration (s)
         self.N = 10  # Action steps
 
         # Physical dimensions

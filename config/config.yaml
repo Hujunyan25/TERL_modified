@@ -5,7 +5,7 @@
 seed: 9
 
 # Total number of training timesteps
-total_timesteps: 30000
+total_timesteps: 210000
 
 # Frequency of evaluation during training
 eval_freq: 30000
@@ -78,9 +78,9 @@ training:
 # Environment parameters
 env:
   # Width of the environment
-  width: 120.0
+  width: 60.0
   # Height of the environment
-  height: 120.0
+  height: 60.0
   # Radius around the pursuer that must be free of objects
   clear_r: 15.0
   # Range of obstacle radius
