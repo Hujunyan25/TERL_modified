@@ -549,12 +549,12 @@ class MarineEnv(gym.Env):
     def update_pursuing_status(self):
         """Update pursuers' pursuing status based on distance to nearest evader."""
         for pursuer in self.pursuers:
-            nearest_evader_index = self.find_nearest_evader(pursuer)
-            distance = np.linalg.norm(
-                np.array([pursuer.x, pursuer.y]) - np.array(
-                    [self.evaders[nearest_evader_index].x, self.evaders[nearest_evader_index].y])
-            )
-            pursuer.is_pursuing = distance <= self.related_distance
+            # nearest_evader_index = self.find_nearest_evader(pursuer)
+            # distance = np.linalg.norm(
+            #     np.array([pursuer.x, pursuer.y]) - np.array(
+            #         [self.evaders[nearest_evader_index].x, self.evaders[nearest_evader_index].y])
+            # )
+            pursuer.is_pursuing = True
 
     def find_nearest_evader(self, pursuer):
         """
