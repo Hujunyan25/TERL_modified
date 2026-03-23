@@ -193,6 +193,13 @@ class TERLPolicy(nn.Module):
         self.output_layer = nn.Linear(self.hidden_dim, config.action_size)
         self.layer_norm = nn.LayerNorm(self.hidden_dim)
 
+        # 新增：2H→H的维度映射层（核心修改）
+        self.feature_compress = nn.Sequential(
+            nn.Linear(2 * self.hidden_dim, self.hidden_dim),  # 512→256
+            nn.LayerNorm(self.hidden_dim),  # 可选，提升训练稳定性
+            nn.ReLU()  # 可选，增加非线性表达
+        )
+
         # Initialize weights
         self._init_weights()
 
@@ -202,13 +209,6 @@ class TERLPolicy(nn.Module):
         # For storing the last attention weights
         self._last_target_weights = None
         self._last_transformer_weights = None
-        
-        # 新增：2H→H的维度映射层（核心修改）
-        self.feature_compress = nn.Sequential(
-            nn.Linear(2 * self.hidden_dim, self.hidden_dim),  # 512→256
-            nn.LayerNorm(self.hidden_dim),  # 可选，提升训练稳定性
-            nn.ReLU()  # 可选，增加非线性表达
-        )
 
     def _init_weights(self):
         """Initialize network weights"""

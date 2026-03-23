@@ -335,52 +335,35 @@ class Agent:
         Returns:
             float: Training loss.
         """
-        for _ in range(100):  # PER采样多次，增加更新频率
-            batch, weights, indices = self.memory.sample()
-            states, actions, rewards, next_states, dones = (
-                batch['observations'],
-                batch['actions'],
-                batch['rewards'],
-                batch['next_observations'],
-                batch['dones']
-            )
-            actions = actions.unsqueeze(-1).long()
-            rewards = rewards.unsqueeze(-1).float()
-            dones = dones.unsqueeze(-1).float()
+        states, actions, rewards, next_states, dones = self.memory.sample().values()
+        actions = actions.unsqueeze(-1).long()
+        rewards = rewards.unsqueeze(-1).float()
+        dones = dones.unsqueeze(-1).float()
 
-            self.optimizer.zero_grad()
-            # Get max predicted Q values (for next states) from target model
-            Q_targets_next, _ = self.policy_target(next_states)
-            Q_targets_next = Q_targets_next.detach().max(2)[0].unsqueeze(1)  # (batch_size, 1, N)
+        self.optimizer.zero_grad()
+        # Get max predicted Q values (for next states) from target model
+        Q_targets_next, _ = self.policy_target(next_states)
+        Q_targets_next = Q_targets_next.detach().max(2)[0].unsqueeze(1)  # (batch_size, 1, N)
 
-            # Compute Q targets for current states
-            Q_targets = rewards.unsqueeze(-1) + (self.GAMMA * Q_targets_next * (1. - dones.unsqueeze(-1)))
-            # Get expected Q values from local model
-            Q_expected, taus = self.policy_local(states)
-            Q_expected = Q_expected.gather(2, actions.unsqueeze(-1).expand(self.BATCH_SIZE, 8, 1))
+        # Compute Q targets for current states
+        Q_targets = rewards.unsqueeze(-1) + (self.GAMMA * Q_targets_next * (1. - dones.unsqueeze(-1)))
+        # Get expected Q values from local model
+        Q_expected, taus = self.policy_local(states)
+        Q_expected = Q_expected.gather(2, actions.unsqueeze(-1).expand(self.BATCH_SIZE, 8, 1))
 
-            # Quantile Huber loss
-            td_error = Q_targets - Q_expected
-            assert td_error.shape == (self.BATCH_SIZE, 8, 8), "wrong td error shape"
-            huber_l = calculate_huber_loss(td_error, 1.0)
-            quantil_l = abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
+        # Quantile Huber loss
+        td_error = Q_targets - Q_expected
+        assert td_error.shape == (self.BATCH_SIZE, 8, 8), "wrong td error shape"
+        huber_l = calculate_huber_loss(td_error, 1.0)
+        quantil_l = abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
 
-            loss = quantil_l.sum(dim=1).mean(dim=1)  # keepdim=True if per weights get multiple
-            loss = (loss * weights).mean()
+        loss = quantil_l.sum(dim=1).mean(dim=1)  # keepdim=True if per weights get multiple
+        loss = loss.mean()
 
-            # Minimize the loss
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.policy_local.parameters(), 0.5)
-            self.optimizer.step()
-
-            #更新优先级
-            # quantil_l.shape=(B,8,8) → mean(dim=(1,2)) → (B,) （1维，B=batch_size）
-            sample_quantile_loss = quantil_l.sum(dim=1).mean(dim=1) 
-            # 步骤2：归一化（可选，让数值范围和TD误差对齐）
-            priority_values = sample_quantile_loss.detach()  # 剥离计算图，requires_grad=False
-            priority_values = priority_values / (priority_values.max() + 1e-8)  
-            # 步骤3:更新优先级
-            self.memory.update_priorities(indices, priority_values)
+        # Minimize the loss
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy_local.parameters(), 0.5)
+        self.optimizer.step()
 
         return loss.detach().cpu().numpy()
 
