@@ -260,8 +260,8 @@ class Trainer:
 
                 # Evaluate every eval_freq steps
                 if self.current_timestep == self.learning_starts or self.current_timestep % eval_freq == 0:
-                    self.evaluation()
-                    self.save_evaluation(eval_log_path)
+                    # self.evaluation()
+                    # self.save_evaluation(eval_log_path)
                     for agent in [self.pursuer_agent]:
                         if agent is None or not agent.training:
                             continue
