@@ -5,30 +5,23 @@ seeds: 6
 
 exp_schedule:
   # Number of episodes per experiment configuration
-  num_episodes: [20, 20, 20]
+  num_episodes: [20]
   # Number of pursuers per experiment stage
-  num_pursuers: [7, 11, 15]
+  num_pursuers: [4]
   # Number of evaders per experiment stage
-  num_evaders: [2, 3, 4]
-  # Number of ocean current fields used per experiment stage
-  num_cores: [8, 8, 8]
+  num_evaders: [1]
   # Number of obstacles in the environment per experiment stage
-  num_obstacles: [2, 4, 6]
+  num_obstacles: [2]
   # Minimum initial distance between pursuers and evaders during experiment
-  min_pursuer_evader_init_dis: [20.0, 20.0, 20.0]
+  min_pursuer_evader_init_dis: [15.0]
 
-# Training parameters
-training:
-  # Maximum timesteps per episode during training
-  episode_max_length: 3000
-  update_every: 4
 
 # Environment parameters
 env:
   # Width of the environment
-  width: 120.0
+  width: 60.0
   # Height of the environment
-  height: 120.0
+  height: 60.0
   # Radius around the pursuer that must be free of objects
   clear_r: 15.0
   # Range of obstacle radius
@@ -85,4 +78,4 @@ apf:
 
 perception:
   # Maximum number of observable evaders
-  max_evader_num: 8
+  max_evader_num: 1
