@@ -13,7 +13,7 @@ exp_schedule:
   # Number of obstacles in the environment per experiment stage
   num_obstacles: [2]
   # Minimum initial distance between pursuers and evaders during experiment
-  min_pursuer_evader_init_dis: [15.0]
+  min_pursuer_evader_init_dis: [15]
 
 
 # Environment parameters

@@ -10,7 +10,8 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args":["-D", "cpu", "-R", "0", "-I", "0"]
+            // "args":["-D", "cpu", "-R", "0", "-I", "0"]
+            "args":["-D", "cpu", "-C", "0"]
         }
     ]
 }

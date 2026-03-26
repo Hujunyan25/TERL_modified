@@ -116,6 +116,7 @@ def evaluation(states, agent, evader_agent, eval_env: MarineEnv, use_rl=True, us
         experiment_min_distance = min(experiment_min_distance, min_distance)
 
         end_episode = (length >= 3000) or len([pursuer for pursuer in eval_env.pursuers if
+        end_episode = (length >= 3000) or len([pursuer for pursuer in eval_env.pursuers if
                                                not pursuer.deactivated]) < 3 or eval_env.check_all_evader_is_captured()
         if end_episode:
             logger.info(
@@ -151,7 +152,6 @@ def exp_setup(envs, eval_schedule, i):
     for test_env in envs:
         test_env.num_pursuers = eval_schedule["num_pursuers"][i]
         test_env.num_evaders = eval_schedule["num_evaders"][i]
-        test_env.num_cores = eval_schedule["num_cores"][i]
         test_env.num_obs = eval_schedule["num_obstacles"][i]
         test_env.min_pursuer_evader_init_dis = eval_schedule["min_pursuer_evader_init_dis"][i]
 
@@ -179,9 +179,13 @@ def run_experiment(eval_schedules, index):
     """Run the experiment with the specified evaluation schedules."""
     agents = [Terl_agent]
     evader_agents = [evader_agent1]
+    agents = [Terl_agent, Dqn_agent]
+    evader_agents = [evader_agent1, evader_agent2]
     names = model_name
     envs = [test_env_1]
     evaluations = [evaluation]
+    envs = [test_env_1, test_env_2]
+    evaluations = [evaluation, evaluation]
 
     color_palette = ["#2E7BA6", "#B46FA2", "#2A8C66", "#C78A2A", "#4B61C6", "#E0BFE0", "#3D5A80", "#914E25"]
 
@@ -460,7 +464,7 @@ def initialize_wandb(config):
         wandb.init(
             project=args.project,
             group=args.group,
-            name=f"Ablation Experiment",
+            name=f"Baseline Experiment",
             config=config,
         )
         return True
@@ -523,12 +527,14 @@ if __name__ == "__main__":
     # Model names
     model_name = [
         "self_train"
+        "TERL",
+        "DQN",
     ]
 
     save_dir = f"TrainedModels/{model_name[0]}"
 
     project_root = os.path.dirname(os.path.abspath(__file__))
-    model_dir = os.path.join(project_root, save_dir)
+    model_dir =os.path.join(project_root, save_dir)
     config_file = os.path.join(project_root, "config", f"{exp_config_list[args.config]}")
     logger.info(f"config_file: {config_file}")
 
@@ -543,6 +549,15 @@ if __name__ == "__main__":
     Terl_agent = Agent(device=device, model_name=model_name[0])
     Terl_agent.load_model(model_dir, device)
     evader_agent1 = ApfAgent(test_env_1.evaders[0].a, test_env_1.evaders[0].w)
+
+
+    save_dir = f"TrainedModels/{model_name[1]}"
+    model_dir = os.path.join(project_root,save_dir)
+
+    test_env_2 = MarineEnv(seed)
+    Dqn_agent = Agent(device=device, model_name=model_name[1], use_iqn=False)
+    Dqn_agent.load_model(model_dir, device)
+    evader_agent2 = ApfAgent(test_env_2.evaders[0].a, test_env_2.evaders[0].w)
 
 
 
