@@ -176,11 +176,11 @@ def dashboard(eval_schedule, indent=0):
 
 def run_experiment(eval_schedules, index):
     """Run the experiment with the specified evaluation schedules."""
-    agents = [Terl_agent]
-    evader_agents = [evader_agent1]
+    agents = [Terl_agent, Dqn_agent]
+    evader_agents = [evader_agent1, evader_agent2]
     names = model_name
-    envs = [test_env_1]
-    evaluations = [evaluation]
+    envs = [test_env_1, test_env_2]
+    evaluations = [evaluation, evaluation]
 
     color_palette = ["#2E7BA6", "#B46FA2", "#2A8C66", "#C78A2A", "#4B61C6", "#E0BFE0", "#3D5A80", "#914E25"]
 
@@ -522,12 +522,13 @@ if __name__ == "__main__":
     # Model names
     model_name = [
         "TERL",
+        "DQN",
     ]
 
-    save_dir = f"TrainedModels\TERL\training_2026-03-24-12-36-52"
+    save_dir = f"TrainedModels/{model_name[0]}"
 
     project_root = os.path.dirname(os.path.abspath(__file__))
-    model_dir = r"C:\Users\Hu Junyan\Desktop\TERL_PERIQN\TERL_modified\TrainedModels\TERL\training_2026-03-24-12-36-52"
+    model_dir =os.path.join(project_root, save_dir)
     config_file = os.path.join(project_root, "config", f"{exp_config_list[args.config]}")
     logger.info(f"config_file: {config_file}")
 
@@ -542,6 +543,14 @@ if __name__ == "__main__":
     Terl_agent = Agent(device=device, model_name=model_name[0])
     Terl_agent.load_model(model_dir, device)
     evader_agent1 = ApfAgent(test_env_1.evaders[0].a, test_env_1.evaders[0].w)
+
+    save_dir = f"TrainedModels/{model_name[1]}"
+    model_dir = os.path.join(project_root,save_dir)
+
+    test_env_2 = MarineEnv(seed)
+    Dqn_agent = Agent(device=device, model_name=model_name[1], use_iqn=False)
+    Dqn_agent.load_model(model_dir, device)
+    evader_agent2 = ApfAgent(test_env_2.evaders[0].a, test_env_2.evaders[0].w)
 
 
 
