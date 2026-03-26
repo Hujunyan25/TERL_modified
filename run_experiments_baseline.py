@@ -116,7 +116,6 @@ def evaluation(states, agent, evader_agent, eval_env: MarineEnv, use_rl=True, us
         experiment_min_distance = min(experiment_min_distance, min_distance)
 
         end_episode = (length >= 3000) or len([pursuer for pursuer in eval_env.pursuers if
-        end_episode = (length >= 3000) or len([pursuer for pursuer in eval_env.pursuers if
                                                not pursuer.deactivated]) < 3 or eval_env.check_all_evader_is_captured()
         if end_episode:
             logger.info(

@@ -153,10 +153,10 @@ class ReplayBuffer:
         :param indices: 采样时返回的索引列表
         :param td_errors: 新计算的误差
         '''
-
-        for idx, td_error in zip(indices, td_errors):
+        with torch.no_grad():
+            priorities = (torch.abs(td_errors) + self.epsilon) ** self.alpha
             #重新计算优先级并更新
-            self.priorities[idx] = (torch.abs(td_error) + self.epsilon) ** self.alpha
+            self.priorities[indices] = priorities
 
     def __len__(self):
         return self.size
