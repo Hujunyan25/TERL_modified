@@ -111,7 +111,7 @@ class Pursuer(Robot):
         # Configuration parameters
         MAX_ANGLE_GAP = np.pi  # Maximum allowable angle gap (180 degrees)
         MAX_ANGLE_RATIO = 3.0  # Maximum angle should not exceed 3 times the minimum angle
-        MIN_PURSUERS = 3  # Minimum number of pursuers required besides itself (at least 3 in total)
+        MIN_PURSUERS = 2  # Minimum number of pursuers required besides itself (at least 3 in total)
 
         self_position = np.array([self.x, self.y])
 
@@ -144,55 +144,28 @@ class Pursuer(Robot):
 
             involved_pursuers = nearby_pursuers + [self]
 
-            # 步骤2：计算极角并排序（0~360度）
-            polar_angles = []
-            for uav in involved_pursuers:
-                vector = uav - evader_position
-                angle_rad = np.arctan2(vector[1], vector[0])
-                angle_rad = angle_rad % (2 * np.pi)
-                polar_angles.append(angle_rad)
-            
-            sorted_indices = np.argsort(polar_angles)
-            sorted_angles = [polar_angles[i] for i in sorted_indices]
-            
-            # 步骤3：计算相邻夹角（闭环）
-            adjacent_angles = []
-            ideal_angle = 2 * np.pi / len(involved_pursuers)  # 理想均匀夹角
-            for i in range(len(involved_pursuers)):
-                curr = sorted_angles[i]
-                next_ang = sorted_angles[(i + 1) % len(involved_pursuers)]
-                diff = next_ang - curr
-                diff = diff % (2 * np.pi)
-                adjacent_angles.append(diff)
+            # Compute angles of all pursuers relative to the evader
+            pursuer_angles = [
+                np.arctan2(p.y - evader_position[1], p.x - evader_position[0]) % (2 * np.pi)
+                for p in involved_pursuers
+            ]
+            pursuer_angles.sort()
 
-            ideal_angle = 2 * np.pi / len(involved_pursuers)
-            avg_adjacent = np.mean(adjacent_angles)
-            avg_diff = abs(avg_adjacent - ideal_angle)
-            avg_ok = avg_diff <= 5 * np.pi / 180
-            #每个夹角与理想值的偏差
-            single_diffs = [abs(ang - ideal_angle) for ang in adjacent_angles]
-            max_single_diffs = max(single_diffs)
-            single_ok = max_single_diffs <= np.pi / 18
+            # Compute angles between adjacent pursuers
+            adjacent_angles = [
+                (pursuer_angles[(i + 1) % len(pursuer_angles)] - pursuer_angles[i]) % (2 * np.pi)
+                for i in range(len(pursuer_angles))
+            ]
 
-            is_encircled = avg_ok and single_ok
-            if not is_encircled:
+            # Check angle distribution
+            min_angle = min(adjacent_angles)
+            max_angle = max(adjacent_angles)
+
+            # Validate encirclement:
+            # 1. Maximum gap ≤ 180 degrees
+            # 2. Maximum angle ≤ 3 times the minimum angle
+            if max_angle > MAX_ANGLE_GAP or max_angle > min_angle * MAX_ANGLE_RATIO:
                 continue
-
-            # # Compute angles between adjacent pursuers
-            # adjacent_angles = [
-            #     (pursuer_angles[(i + 1) % len(pursuer_angles)] - pursuer_angles[i]) % (2 * np.pi)
-            #     for i in range(len(pursuer_angles))
-            # ]
-
-            # # Check angle distribution
-            # min_angle = min(adjacent_angles)
-            # max_angle = max(adjacent_angles)
-
-            # # Validate encirclement:
-            # # 1. Maximum gap ≤ 180 degrees
-            # # 2. Maximum angle ≤ 3 times the minimum angle
-            # if max_angle > MAX_ANGLE_GAP or max_angle > min_angle * MAX_ANGLE_RATIO:
-            #     continue
 
             # Mark capture status and log the event
             self.is_current_target_captured = True

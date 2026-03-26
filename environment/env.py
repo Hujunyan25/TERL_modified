@@ -1147,6 +1147,7 @@ class MarineEnv(gym.Env):
             # Initialize dynamics
             pursuer.compute_actions()
             # current_v = self.get_current_velocity(float(pursuer.start[0]), float(pursuer.start[1]))
+            current_v = np.array((0, 0), dtype = np.float64)
             pursuer.reset_state(current_velocity=current_v)
             self.pursuers.append(pursuer)
 
