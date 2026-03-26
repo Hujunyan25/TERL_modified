@@ -1,0 +1,109 @@
+apf:
+  force_range: 15.0
+env:
+  boundary_penalty: -5.0
+  capture_distance: 9.0
+  clear_r: 15.0
+  collision_penalty: -80.0
+  decay_factor: -0.05
+  distance_reward: 5.0
+  emergency_penalty: -5.0
+  evenly_distributed_reward: 5.0
+  goal_reward: 120.0
+  height: 60.0
+  obs_r_range:
+  - 1.0
+  - 1.1
+  related_distance: 18.0
+  timestep_penalty: -1.0
+  unevenly_distributed_reward: -10.0
+  width: 60.0
+evader:
+  a:
+  - -0.4
+  - 0
+  - 0.4
+  max_speed: 3.5
+  perception_range: 20.0
+  w:
+  - -0.5235987755982988
+  - -0.2617993877991494
+  - 0.0
+  - 0.2617993877991494
+  - 0.5235987755982988
+eval_freq: 30000
+eval_schedule:
+  min_pursuer_evader_init_dis:
+  - 20.0
+  num_episodes:
+  - 5
+  num_evaders:
+  - 1
+  num_obstacles:
+  - 2
+  num_pursuers:
+  - 4
+exp_schedule:
+  min_pursuer_evader_init_dis:
+  - 10.0
+  - 13.0
+  - 15.0
+  - 20.0
+  - 20.0
+  num_episodes:
+  - 20
+  - 20
+  - 20
+  - 20
+  - 20
+  num_evaders:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  num_obstacles:
+  - 0
+  - 2
+  - 4
+  - 6
+  - 8
+  num_pursuers:
+  - 3
+  - 7
+  - 11
+  - 15
+  - 18
+perception:
+  max_evader_num: 1
+pursuer:
+  a:
+  - -0.4
+  - 0.0
+  - 0.4
+  distance_capture: env.capture_distance
+  max_speed: 3
+  perception_range: 20.0
+  w:
+  - -0.5235987755982988
+  - 0.0
+  - 0.5235987755982988
+save_dir: C:\Users\Hu Junyan\Desktop\TERL_PERIQN\TERL_modified
+seed: 9
+total_timesteps: 1500000
+training:
+  episode_max_length: 3000
+  update_every: 4
+training_schedule:
+  min_pursuer_evader_init_dis:
+  - 15.0
+  num_evaders:
+  - 1
+  num_obstacles:
+  - 2
+  num_pursuers:
+  - 4
+  time_steps:
+  - 0
+training_time: 2026-03-26-13-08-44
+use_iqn: true
