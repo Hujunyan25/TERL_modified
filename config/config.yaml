@@ -104,13 +104,13 @@ env:
   unevenly_distributed_reward: -10.0      # Penalty for excessive pursuer clustering (>=5 pursuers)
 
   # Distance thresholds
-  capture_distance: 8.0         # Capture distance
+  capture_distance: 9.0         # Capture distance
   related_distance: 18.0        # Related distance (threshold for determining pursuer-evader interaction)
 
 # Pursuer agent parameters
 pursuer:
   # Maximum speed of the pursuer
-  max_speed: 3.0
+  max_speed: 3
   # Distance within which the pursuer can capture an evader
   distance_capture: env.capture_distance
   # Available acceleration values for the pursuer
@@ -125,7 +125,7 @@ evader:
   # Maximum speed of the evader
   max_speed: 3.5
   # Available acceleration values for the evader
-  a: [ -0.4, 0.0, 0.4 ]
+  a: [ -0.4, 0, 0.4 ]
   # Available angular velocity (turning speed) values for the evader
   w: [ -0.5235987755982988, -0.2617993877991494, 0.0, 0.2617993877991494, 0.5235987755982988 ]
   # Perception range of the evader

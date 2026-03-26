@@ -552,6 +552,12 @@ class MarineEnv(gym.Env):
             #         [self.evaders[nearest_evader_index].x, self.evaders[nearest_evader_index].y])
             # )
             pursuer.is_pursuing = True
+            # nearest_evader_index = self.find_nearest_evader(pursuer)
+            # distance = np.linalg.norm(
+            #     np.array([pursuer.x, pursuer.y]) - np.array(
+            #         [self.evaders[nearest_evader_index].x, self.evaders[nearest_evader_index].y])
+            # )
+            pursuer.is_pursuing = True
 
     def find_nearest_evader(self, pursuer):
         """
@@ -1106,6 +1112,8 @@ class MarineEnv(gym.Env):
             pursuer.angle_capture = eval_config["pursuers"]["angle_capture"][i]
             # Initialize dynamics
             pursuer.compute_actions()
+            # current_v = self.get_current_velocity(float(pursuer.start[0]), float(pursuer.start[1]))
+            current_v = np.array((0, 0), dtype = np.float64)
             current_v = np.array((0, 0), dtype = np.float64)
             pursuer.reset_state(current_velocity=current_v)
             self.pursuers.append(pursuer)

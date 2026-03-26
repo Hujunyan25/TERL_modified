@@ -111,7 +111,7 @@ class Pursuer(Robot):
         # Configuration parameters
         MAX_ANGLE_GAP = np.pi  # Maximum allowable angle gap (180 degrees)
         MAX_ANGLE_RATIO = 3.0  # Maximum angle should not exceed 3 times the minimum angle
-        MIN_PURSUERS = 3  # Minimum number of pursuers required besides itself (at least 3 in total)
+        MIN_PURSUERS = 2  # Minimum number of pursuers required besides itself (at least 3 in total)
 
         self_position = np.array([self.x, self.y])
 
@@ -150,19 +150,6 @@ class Pursuer(Robot):
                 for p in involved_pursuers
             ]
             pursuer_angles.sort()
-
-            # ideal_angle = 2 * np.pi / len(involved_pursuers)
-            # avg_adjacent = np.mean(pursuer_angles)
-            # avg_diff = abs(avg_adjacent - ideal_angle)
-            # avg_ok = avg_diff <= np.pi * 2 / len(pursuers)
-            # #每个夹角与理想值的偏差
-            # single_diffs = [abs(ang - ideal_angle) for ang in adjacent_angles]
-            # max_single_diffs = max(single_diffs)
-            # single_ok = max_single_diffs <= np.pi * 2 / 18
-
-            # is_encircled = avg_diff and single_ok
-            # if not is_encircled:
-            #     continue
 
             # Compute angles between adjacent pursuers
             adjacent_angles = [

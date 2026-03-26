@@ -5,7 +5,7 @@
 seed: 9
 
 # Total number of training timesteps
-total_timesteps: 300000
+total_timesteps: 1500000
 
 # Frequency of evaluation during training
 eval_freq: 30000
@@ -27,7 +27,7 @@ training_schedule:
 eval_schedule:
   # Number of episodes per evaluation configuration
   # Increase the number of episodes for more stable evaluation results
-  num_episodes: [5]
+  num_episodes: [20]
 
   # Number of pursuers per evaluation step
   # Covers key stages from training: initial (3), mid-stage (7,11), late-stage (15,18)
@@ -46,6 +46,7 @@ eval_schedule:
   # Minimum initial distance between pursuers and evaders during evaluation
   # Use larger distances from the final stage of training to test stability
   min_pursuer_evader_init_dis: [ 20.0 ]
+
 
 exp_schedule:
   # 20 episodes per evaluation configuration to ensure result stability
