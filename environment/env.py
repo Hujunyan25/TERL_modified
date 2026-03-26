@@ -420,7 +420,7 @@ class MarineEnv(gym.Env):
                                                                              "number of pursuers")
         return all_pursuers_distance_to_evaders
 
-    def get_distance_to_other_pursuers(self) -> List[Optional[List]]:
+    def get_distance_to_other_pursuers(self) -> List[Optional[float]]:
         """
         Get distances between pursuers.
 
@@ -435,18 +435,14 @@ class MarineEnv(gym.Env):
                 continue
 
             pursuer_distance_to_other_pursuers = [
-                (
-                    other_pursuer.id,  # 打包无人机编号
-                    # 核心：计算距离（处理负数） + 编号
                     np.linalg.norm([pursuer.x - other_pursuer.x, pursuer.y - other_pursuer.y]) - (pursuer.r + other_pursuer.r)
-                )
                 for other_pursuer in self.pursuers
                 # 过滤条件：排除自己 + 排除失效无人机
                 if (other_pursuer.id != pursuer.id) 
                 and (not other_pursuer.deactivated)
             ]
-
-            all_pursuers_distance_to_other_pursuers.append(pursuer_distance_to_other_pursuers)
+            pursuer_distance_to_other_pursuers_min_distance = min(pursuer_distance_to_other_pursuers)
+            all_pursuers_distance_to_other_pursuers.append(pursuer_distance_to_other_pursuers_min_distance)
 
         assert len(all_pursuers_distance_to_other_pursuers) == len(self.pursuers), (
             "Number of distances should be equal "
@@ -475,7 +471,7 @@ class MarineEnv(gym.Env):
             pursuer.trajectory.append([pursuer.x, pursuer.y, pursuer.theta, pursuer.speed, pursuer.velocity[0],
                                        pursuer.velocity[1]])
 
-    def get_distance_to_obstacles(self) -> List[Optional[List]]:
+    def get_distance_to_obstacles(self) -> List[Optional[float]]:
         """
         Get distances from pursuers to obstacles.
 
@@ -491,7 +487,8 @@ class MarineEnv(gym.Env):
 
             distance_to_obs = [np.linalg.norm([pursuer.x - obstacle.x, pursuer.y - obstacle.y]) - (pursuer.r + obstacle.r) for obstacle in self.obstacles]
 
-            all_pursuers_distance_to_obstacles.append(distance_to_obs)
+            distance_to_obs_min = min(distance_to_obs)
+            all_pursuers_distance_to_obstacles.append(distance_to_obs_min)
 
         assert len(all_pursuers_distance_to_obstacles) == len(self.pursuers), ("Number of distances should be equal to "
                                                                                "number of pursuers")
@@ -549,6 +546,12 @@ class MarineEnv(gym.Env):
     def update_pursuing_status(self):
         """Update pursuers' pursuing status based on distance to nearest evader."""
         for pursuer in self.pursuers:
+            # nearest_evader_index = self.find_nearest_evader(pursuer)
+            # distance = np.linalg.norm(
+            #     np.array([pursuer.x, pursuer.y]) - np.array(
+            #         [self.evaders[nearest_evader_index].x, self.evaders[nearest_evader_index].y])
+            # )
+            pursuer.is_pursuing = True
             # nearest_evader_index = self.find_nearest_evader(pursuer)
             # distance = np.linalg.norm(
             #     np.array([pursuer.x, pursuer.y]) - np.array(
@@ -623,21 +626,13 @@ class MarineEnv(gym.Env):
         # Get post-update pursuer distances to targets
         all_pursuers_dis_after = self.get_pursuers_distance_evaders()
 
-        all_pursuers_distance_to_other_pursuers = self.get_distance_to_other_pursuers() #like List[list]
-        all_purers_distance_to_obstacles = self.get_distance_to_obstacles() #like List[List]
+        all_pursuers_distance_to_other_pursuers = self.get_distance_to_other_pursuers()
+        all_purers_distance_to_obstacles = self.get_distance_to_obstacles()
 
         # Define capture thresholds
         capture_distance = self.pursuers[0].distance_capture  # Capture distance
         safe_distance = 0.5 * capture_distance  # Safety distance
-        
-        # Get pursuer observations
-        observations, collisions = self.get_pursuers_observations()
 
-        k1 = 1
-        k2 = 0.01
-        k3 = 2
-        k4 = 1
-        k5 = 1
         # Update time penalty and distance rewards
         for i, dis in enumerate(all_pursuers_dis_before):
             if dis is None:
@@ -648,58 +643,29 @@ class MarineEnv(gym.Env):
 
             dis_to_pursuer = all_pursuers_distance_to_other_pursuers[i]
             dis_to_obstacle = all_purers_distance_to_obstacles[i]
-            #1.首先计算避免碰撞的奖励
-            rewards_avoid_uavs = 0
-            #a.防止无人机与同伴无人机距离过近
-            for _, dis in dis_to_pursuer:
-                if dis < safe_distance:
-                    rewards_avoid_uavs += -k1 * (dis - safe_distance)**2
 
-
-
-            #2.其次就是尽快包围目标的需要
-            reward_encircle = 0
             # Apply time penalty
-            reward_encircle += self.timestep_penalty
+            rewards[i] += self.timestep_penalty
 
             # Apply emergency penalty for unsafe distances
-            # if min_dis_after < safe_distance or dis_to_pursuer < safe_distance or dis_to_obstacle < safe_distance:
-            #     rewards[i] += self.emergency_penalty
+            if min_dis_after < safe_distance or dis_to_pursuer < safe_distance or dis_to_obstacle < safe_distance:
+                rewards[i] += self.emergency_penalty
 
-            nearest_id, nearest_distance =  min(dis_to_pursuer, key=lambda x: x[1])
-            neighbor_distance_to_evader = np.linalg.norm([self.pursuers[nearest_id].x - self.evaders[0].x,self.pursuers[nearest_id].y - self.evaders[0].y])
-            if min_dis_after < capture_distance and neighbor_distance_to_evader < capture_distance:
-                flag = 1
-            else:
-                flag = 0
-            reward_encircle += -k2*(min_dis_after - capture_distance)**2 + k3 * nearest_distance * flag 
+            for dis_to_evader in all_pursuers_dis_after[i]:
+                # Fixed reward within capture distance
+                if dis_to_evader <= capture_distance:
+                    rewards[i] += self.distance_reward
+                # Exponential decay reward beyond capture distance
+                else:
+                    distance_over_saturation = min_dis_after - capture_distance
+                    decreasing_reward = 5 * np.exp(self.decay_factor * distance_over_saturation)
+                    rewards[i] += decreasing_reward
 
-            # for dis_to_evader in all_pursuers_dis_after[i]:#无人机离目标的距离
-            #     # Fixed reward within capture distance
-            #     if dis_to_evader <= capture_distance:
-            #         rewards[i] += self.distance_reward * k6
-            #     # Exponential decay reward beyond capture distance
-            #     else:
-            #         distance_over_saturation = min_dis_after - capture_distance
-            #         decreasing_reward = 5 * np.exp(self.decay_factor * distance_over_saturation)
-            #         rewards[i] += decreasing_reward * k6
+        global_reward = self.global_reward()
+        rewards += global_reward
 
-            #3.最后是无人机远离障碍物以及不能越界的奖励
-            reward_avoid_obs = 0
-            #a.不能越界
-            if self.pursuers[i].x < 0 or self.pursuers[i].x > self.arena_size or self.pursuers[i].y < 0 or self.pursuers[i].y > self.arena_size:
-                reward_avoid_obs += self.boundary_penalty * (max(abs(self.pursuers[i].x),abs(self.pursuers[i].y)) - self.arena_size) * k4
-            
-            #b.防止无人机与障碍物之间的碰撞 
-            for dis in dis_to_obstacle:
-                if dis < 0:
-                    reward_avoid_obs += k5 * dis
-            avoid_collision = 0.02
-            encircle = 0.06
-            avoid_obstacle = 0.02
-            rewards[i] = avoid_collision * rewards_avoid_uavs + encircle * reward_encircle + avoid_obstacle * reward_avoid_obs
-            
-
+        # Get pursuer observations
+        observations, collisions = self.get_pursuers_observations()
 
         capture_target_states, capture_angles, num_pursuer_captures, capture_evader_ids = self.get_capture_status_and_info()
 
@@ -1147,6 +1113,7 @@ class MarineEnv(gym.Env):
             # Initialize dynamics
             pursuer.compute_actions()
             # current_v = self.get_current_velocity(float(pursuer.start[0]), float(pursuer.start[1]))
+            current_v = np.array((0, 0), dtype = np.float64)
             current_v = np.array((0, 0), dtype = np.float64)
             pursuer.reset_state(current_velocity=current_v)
             self.pursuers.append(pursuer)
