@@ -521,13 +521,13 @@ if __name__ == "__main__":
 
     # Model names
     model_name = [
-        "IQN",
+        "TERL",
     ]
 
-    save_dir = f"TrainedModels/{model_name[0]}"
+    save_dir = f"TrainedModels\TERL\training_2026-03-24-12-36-52"
 
     project_root = os.path.dirname(os.path.abspath(__file__))
-    model_dir = os.path.join(project_root, save_dir)
+    model_dir = r"C:\Users\Hu Junyan\Desktop\TERL_PERIQN\TERL_modified\TrainedModels\TERL\training_2026-03-24-12-36-52"
     config_file = os.path.join(project_root, "config", f"{exp_config_list[args.config]}")
     logger.info(f"config_file: {config_file}")
 
