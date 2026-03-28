@@ -5,7 +5,7 @@
 seed: 9
 
 # Total number of training timesteps
-total_timesteps: 2000000
+total_timesteps: 1500000
 
 # Frequency of evaluation during training
 eval_freq: 30000

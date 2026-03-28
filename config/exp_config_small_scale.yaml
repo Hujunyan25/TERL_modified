@@ -16,6 +16,12 @@ exp_schedule:
   min_pursuer_evader_init_dis: [15]
 
 
+# Training parameters
+training:
+  # Maximum timesteps per episode during training
+  episode_max_length: 3000
+  update_every: 4
+  
 # Environment parameters
 env:
   # Width of the environment

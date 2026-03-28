@@ -176,13 +176,13 @@ def dashboard(eval_schedule, indent=0):
 
 def run_experiment(eval_schedules, index):
     """Run the experiment with the specified evaluation schedules."""
-    agents = [Terl_agent]
-    evader_agents = [evader_agent1]
+    # agents = [Terl_agent]
+    # evader_agents = [evader_agent1]
     agents = [Terl_agent, Dqn_agent]
     evader_agents = [evader_agent1, evader_agent2]
     names = model_name
-    envs = [test_env_1]
-    evaluations = [evaluation]
+    # envs = [test_env_1]
+    # evaluations = [evaluation]
     envs = [test_env_1, test_env_2]
     evaluations = [evaluation, evaluation]
 
@@ -259,7 +259,7 @@ def run_experiment(eval_schedules, index):
                     else:
                         raise RuntimeError("Agent not implemented!")
                 else:
-                    if name == "self_train":
+                    if name == "TERL":
                         success, rewards, computation_times, max_pursuit_time, avg_pursuit_time, success_energies, collision_ratio, experiment_min_distance = eval_func(
                             obs, agent, evader_agent, env, act_adaptive=False, save_episode=False)
                     elif name == "IQN":
@@ -525,12 +525,11 @@ if __name__ == "__main__":
 
     # Model names
     model_name = [
-        "self_train"
         "TERL",
-        "DQN",
+        "MEAN",
     ]
 
-    save_dir = f"TrainedModels/{model_name[0]}"
+    save_dir = f"TrainedModels/TERL/train_without_PER"
 
     project_root = os.path.dirname(os.path.abspath(__file__))
     model_dir =os.path.join(project_root, save_dir)
@@ -550,11 +549,11 @@ if __name__ == "__main__":
     evader_agent1 = ApfAgent(test_env_1.evaders[0].a, test_env_1.evaders[0].w)
 
 
-    save_dir = f"TrainedModels/{model_name[1]}"
+    save_dir = f"TrainedModels/MEAN"
     model_dir = os.path.join(project_root,save_dir)
 
     test_env_2 = MarineEnv(seed)
-    Dqn_agent = Agent(device=device, model_name=model_name[1], use_iqn=False)
+    Dqn_agent = Agent(device=device, model_name=model_name[1])
     Dqn_agent.load_model(model_dir, device)
     evader_agent2 = ApfAgent(test_env_2.evaders[0].a, test_env_2.evaders[0].w)
 

@@ -4,7 +4,7 @@ import numpy as np
 
 class ReplayBuffer:
     def __init__(self, buffer_size, batch_size, device, max_pursuers, max_evaders, max_obstacles,
-                 alpha = 0.6, beta = 0.4, beta_increment = 0.001, epsilon = 1e-6):
+                 alpha = 0.7, beta = 0.4, beta_increment = 0.002, epsilon = 1e-6):
         """
         Initialize the replay buffer
         Args:
@@ -92,6 +92,7 @@ class ReplayBuffer:
             self.priorities[idx] = max_priority
         else:
             #用TD误差计算优先级：优先级 = (|TD误差| + ε)^α，其中ε是一个小常数，防止优先级为0，α控制优先级的程度
+            print(f"TD误差为：{td_error}")
             self.priorities[idx] = (torch.abs(td_error) + self.epsilon) ** self.alpha
         
         # Update pointer and buffer size
