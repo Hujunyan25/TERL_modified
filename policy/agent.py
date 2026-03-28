@@ -335,13 +335,16 @@ class Agent:
         Returns:
             float: Training loss.
         """
-        batch, weights, indices = self.memory.sample()
-        states, actions, rewards, next_states, dones = (
+        self.memory.step()
+        batch = self.memory.sample()
+        states, actions, rewards, next_states, dones, indices, weights = (
             batch['observations'],
             batch['actions'],
             batch['rewards'],
             batch['next_observations'],
-            batch['dones']
+            batch['dones'],
+            batch['indices'],
+            batch['weights']
         )
         actions = actions.unsqueeze(-1).long()
         rewards = rewards.unsqueeze(-1).float()
@@ -361,18 +364,19 @@ class Agent:
         # Quantile Huber loss
         td_error = Q_targets - Q_expected
         assert td_error.shape == (self.BATCH_SIZE, 8, 8), "wrong td error shape"
-        td_error_update = td_error.mean(dim=(1,2))
-        self.memory.update_priorities(indices, td_error_update)
+        td_error_update = td_error.mean(dim=(1,2)).detach()
         huber_l = calculate_huber_loss(td_error, 1.0)
         quantil_l = abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
 
         loss = quantil_l.sum(dim=1).mean(dim=1)  # keepdim=True if per weights get multiple
+        weights = weights.detach()
         loss = (loss * weights).mean()
 
         # Minimize the loss
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.policy_local.parameters(), 0.5)
         self.optimizer.step()
+        self.memory.update_priority(indices, td_error_update)
 
 
         return loss.detach().cpu().numpy()
