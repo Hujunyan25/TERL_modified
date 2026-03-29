@@ -27,7 +27,7 @@ training_schedule:
 eval_schedule:
   # Number of episodes per evaluation configuration
   # Increase the number of episodes for more stable evaluation results
-  num_episodes: [20]
+  num_episodes: [5]
 
   # Number of pursuers per evaluation step
   # Covers key stages from training: initial (3), mid-stage (7,11), late-stage (15,18)
