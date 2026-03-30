@@ -178,13 +178,11 @@ def run_experiment(eval_schedules, index):
     """Run the experiment with the specified evaluation schedules."""
     # agents = [Terl_agent]
     # evader_agents = [evader_agent1]
-    agents = [Terl_agent, Dqn_agent]
-    evader_agents = [evader_agent1, evader_agent2]
+    agents = [Terl_agent, Dqn_agent, mean_agent]
+    evader_agents = [evader_agent1, evader_agent3, evader_agent4]
     names = model_name
-    # envs = [test_env_1]
-    # evaluations = [evaluation]
-    envs = [test_env_1, test_env_2]
-    evaluations = [evaluation, evaluation]
+    envs = [test_env_1, test_env_3, test_env_4]
+    evaluations = [evaluation, evaluation, evaluation]
 
     color_palette = ["#2E7BA6", "#B46FA2", "#2A8C66", "#C78A2A", "#4B61C6", "#E0BFE0", "#3D5A80", "#914E25"]
 
@@ -526,10 +524,11 @@ if __name__ == "__main__":
     # Model names
     model_name = [
         "TERL",
+        "TERL",
         "MEAN",
     ]
 
-    save_dir = f"TrainedModels/TERL/train_without_PER"
+    save_dir = f"TrainedModels/TERL/alpha=0.4,beta=0.00001"
 
     project_root = os.path.dirname(os.path.abspath(__file__))
     model_dir =os.path.join(project_root, save_dir)
@@ -549,13 +548,27 @@ if __name__ == "__main__":
     evader_agent1 = ApfAgent(test_env_1.evaders[0].a, test_env_1.evaders[0].w)
 
 
-    save_dir = f"TrainedModels/MEAN"
-    model_dir = os.path.join(project_root,save_dir)
+    # save_dir = f"TrainedModels/IQN/IQN"
+    # model_dir = os.path.join(project_root,save_dir)
+    # test_env_2 = MarineEnv(seed)
+    # Iqn_agent = Agent(device=device, model_name=model_name[1])
+    # Iqn_agent.load_model(model_dir, device)
+    # evader_agent2 = ApfAgent(test_env_2.evaders[0].a, test_env_2.evaders[0].w)
 
-    test_env_2 = MarineEnv(seed)
+    
+    save_dir = f"TrainedModels/TERL/train_without_PER"
+    model_dir = os.path.join(project_root,save_dir)
+    test_env_3 = MarineEnv(seed)
     Dqn_agent = Agent(device=device, model_name=model_name[1])
     Dqn_agent.load_model(model_dir, device)
-    evader_agent2 = ApfAgent(test_env_2.evaders[0].a, test_env_2.evaders[0].w)
+    evader_agent3 = ApfAgent(test_env_3.evaders[0].a, test_env_3.evaders[0].w)
+    
+    save_dir = f"TrainedModels/MEAN"
+    model_dir = os.path.join(project_root,save_dir)
+    test_env_4 = MarineEnv(seed)
+    mean_agent = Agent(device=device, model_name=model_name[2])
+    mean_agent.load_model(model_dir, device)
+    evader_agent4 = ApfAgent(test_env_4.evaders[0].a, test_env_4.evaders[0].w)
 
 
 
