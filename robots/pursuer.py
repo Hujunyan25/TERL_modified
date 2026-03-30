@@ -150,35 +150,34 @@ class Pursuer(Robot):
                 for p in involved_pursuers
             ]
             pursuer_angles.sort()
-
-            # ideal_angle = 2 * np.pi / len(involved_pursuers)
-            # avg_adjacent = np.mean(pursuer_angles)
-            # avg_diff = abs(avg_adjacent - ideal_angle)
-            # avg_ok = avg_diff <= np.pi * 2 / len(pursuers)
-            # #每个夹角与理想值的偏差
-            # single_diffs = [abs(ang - ideal_angle) for ang in adjacent_angles]
-            # max_single_diffs = max(single_diffs)
-            # single_ok = max_single_diffs <= np.pi * 2 / 18
-
-            # is_encircled = avg_diff and single_ok
-            # if not is_encircled:
-            #     continue
-
             # Compute angles between adjacent pursuers
             adjacent_angles = [
                 (pursuer_angles[(i + 1) % len(pursuer_angles)] - pursuer_angles[i]) % (2 * np.pi)
                 for i in range(len(pursuer_angles))
             ]
+            #这里是用来重新判断是否目标追捕者被围捕成功了
+            ideal_angle = 2 * np.pi / len(involved_pursuers)
+            avg_adjacent = np.mean(pursuer_angles)
+            avg_diff = abs(avg_adjacent - ideal_angle)
+            avg_ok = avg_diff <= np.pi * 2 / len(involved_pursuers)
+            #每个夹角与理想值的偏差
+            single_diffs = [abs(ang - ideal_angle) for ang in adjacent_angles]
+            max_single_diffs = max(single_diffs)
+            single_ok = max_single_diffs <= np.pi * 2 / 18
 
-            # Check angle distribution
-            min_angle = min(adjacent_angles)
-            max_angle = max(adjacent_angles)
-
-            # Validate encirclement:
-            # 1. Maximum gap ≤ 180 degrees
-            # 2. Maximum angle ≤ 3 times the minimum angle
-            if max_angle > MAX_ANGLE_GAP or max_angle > min_angle * MAX_ANGLE_RATIO:
+            is_encircled = avg_ok and single_ok
+            if not is_encircled:
                 continue
+
+            # # Check angle distribution
+            # min_angle = min(adjacent_angles)
+            # max_angle = max(adjacent_angles)
+
+            # # Validate encirclement:
+            # # 1. Maximum gap ≤ 180 degrees
+            # # 2. Maximum angle ≤ 3 times the minimum angle
+            # if max_angle > MAX_ANGLE_GAP or max_angle > min_angle * MAX_ANGLE_RATIO:
+            #     continue
 
             # Mark capture status and log the event
             self.is_current_target_captured = True
@@ -275,8 +274,10 @@ class Pursuer(Robot):
                 distances = np.linalg.norm(obstacle_positions - self_position, axis=1)  # Shape: (num_obstacles,)
 
                 # Find nearest obstacle distance, return perception range if beyond detection
-                min_distance = np.min(distances)
-
+                min_distance = np.min(distances) if np.any(distances < self.perception.range) else self.perception.range
+            else:
+                #return max perception range when no obstacles
+                min_distance = self.perception.range
             self.perception.observation["self"] = list(abs_velocity_r) + [min_distance] + [self.is_pursuing]
             self.perception.observation['masks'].append(True)
             assert len(self.perception.observation["self"]) == self.num_self_state
@@ -286,6 +287,9 @@ class Pursuer(Robot):
             if pursuer is self:
                 continue
             if pursuer.deactivated:
+                continue
+
+            if not self.check_detection(pursuer.x, pursuer.y, pursuer.detect_r):
                 continue
 
             self.perception.observed_pursuers.append(pursuer)
@@ -336,6 +340,8 @@ class Pursuer(Robot):
 
         # Static obstacle perception
         for i, obs in enumerate(obstacles):
+            if not self.check_detection(obs.x, obs.y, obs.r):
+                continue
 
             self.perception.observed_obstacles.append(i)
 

@@ -1097,6 +1097,7 @@ class MarineEnv(gym.Env):
             pursuer.detect_r = eval_config["pursuers"]["detect_r"][i]
             pursuer.a = np.array(eval_config["pursuers"]["a"][i])
             pursuer.w = np.array(eval_config["pursuers"]["w"][i])
+            pursuer.perception.range = eval_config["pursuers"]["perception"]["range"][i]
             pursuer.perception.angle = eval_config["pursuers"]["perception"]["angle"][i]
             pursuer.max_speed = eval_config["pursuers"]["max_speed"][i]
             pursuer.start = tuple(eval_config["pursuers"]["start"][i])
@@ -1125,6 +1126,7 @@ class MarineEnv(gym.Env):
             evader.detect_r = eval_config["evaders"]["detect_r"][i]
             evader.a = np.array(eval_config["evaders"]["a"][i])
             evader.w = np.array(eval_config["evaders"]["w"][i])
+            evader.perception.range = eval_config["evaders"]["perception"]["range"][i]
             evader.perception.angle = eval_config["evaders"]["perception"]["angle"][i]
             evader.max_speed = eval_config["evaders"]["max_speed"][i]
             evader.start = tuple(eval_config["evaders"]["start"][i])
@@ -1193,6 +1195,7 @@ class MarineEnv(gym.Env):
         episode["pursuers"]["a"] = []
         episode["pursuers"]["w"] = []
         episode["pursuers"]["perception"] = {}
+        episode["pursuers"]["perception"]["range"] = []
         episode["pursuers"]["perception"]["angle"] = []
         episode["pursuers"]["perception"]["communication_range"] = []
         episode["pursuers"]["perception"]["communication_angle"] = []
@@ -1219,6 +1222,7 @@ class MarineEnv(gym.Env):
             episode["pursuers"]["detect_r"].append(pursuer.detect_r)
             episode["pursuers"]["a"].append(list(pursuer.a))
             episode["pursuers"]["w"].append(list(pursuer.w))
+            episode["pursuers"]["perception"]["range"].append(pursuer.perception.range)
             episode["pursuers"]["perception"]["angle"].append(pursuer.perception.angle)
             episode["pursuers"]["max_speed"].append(pursuer.max_speed)
             episode["pursuers"]["start"].append(list(pursuer.start))
@@ -1243,6 +1247,7 @@ class MarineEnv(gym.Env):
         episode["evaders"]["a"] = []
         episode["evaders"]["w"] = []
         episode["evaders"]["perception"] = {}
+        episode["evaders"]["perception"]["range"] = []
         episode["evaders"]["perception"]["angle"] = []
         episode["evaders"]["max_speed"] = []
         episode["evaders"]["start"] = []
@@ -1263,6 +1268,7 @@ class MarineEnv(gym.Env):
             episode["evaders"]["detect_r"].append(evader.detect_r)
             episode["evaders"]["a"].append(list(evader.a))
             episode["evaders"]["w"].append(list(evader.w))
+            episode["evaders"]["perception"]["range"].append(evader.perception.range)
             episode["evaders"]["perception"]["angle"].append(evader.perception.angle)
             episode["evaders"]["max_speed"].append(evader.max_speed)
             episode["evaders"]["start"].append(list(evader.start))

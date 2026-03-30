@@ -33,6 +33,7 @@ class Perception:
             is_evader (bool): Whether it is an evader. If it is an evader, set a specific perception format.
         """
         self.perception_config = ConfigManager.get_instance()
+        self.range = 20.0 # Perception range (meters)
         self.angle = 2 * np.pi  # Perception angle range (radians)
         self.max_obstacle_num = 2  # Maximum number of obstacles considered
         self.max_pursuer_num = 3  # Maximum number of pursuers considered

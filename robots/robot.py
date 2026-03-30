@@ -255,6 +255,24 @@ class Robot:
             distance = np.sqrt((self.x - x) ** 2 + (self.y - y) ** 2) - r - self.r
         return distance
 
+    def check_detection(self, entities_x, entities_y, entities_r):
+        """
+        Verify entity is within sensor range and FOV.
+
+        Returns:
+            bool: Detection success status
+        """
+        projected_position = self.project_to_robot_frame(np.array([entities_x, entities_y]), is_vector=False)
+        if np.linalg.norm(projected_position) > self.perception.range + entities_r:
+            return False
+
+        angle = np.arctan2(projected_position[1], projected_position[0])
+        if angle < -0.5 * self.perception.angle or angle > 0.5 * self.perception.angle:
+            return False
+
+        return True
+    
+    
     def project_to_robot_frame(self, array: np.ndarray, is_vector: bool = True) -> np.ndarray:
         """
         Transform coordinates/vectors to robot's frame.
