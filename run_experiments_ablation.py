@@ -160,7 +160,6 @@ def exp_setup(envs, eval_schedule, i):
     for test_env in envs:
         test_env.num_pursuers = eval_schedule["num_pursuers"][i]
         test_env.num_evaders = eval_schedule["num_evaders"][i]
-        test_env.num_cores = eval_schedule["num_cores"][i]
         test_env.num_obs = eval_schedule["num_obstacles"][i]
         test_env.min_pursuer_evader_init_dis = eval_schedule["min_pursuer_evader_init_dis"][i]
 
@@ -196,11 +195,11 @@ def run_experiment(eval_schedules, index):
         eval_schedules (dict): The evaluation schedules configuration.
         index (int): Index for naming the experiment output directory.
     """
-    agents = [Terl_agent, MeanWithTS_agent, MlpWithTS_agent]
-    evader_agents = [evader_agent1, evader_agent2, evader_agent3]
+    agents = [Terl_agent, MeanWithTS_agent]
+    evader_agents = [evader_agent1, evader_agent2]
     names = model_name
-    envs = [test_env_1, test_env_2, test_env_3]
-    evaluations = [evaluation, evaluation, evaluation]
+    envs = [test_env_1, test_env_2]
+    evaluations = [evaluation, evaluation]
 
     color_palette = ["#4B61C6", "#E0BFE0", "#3D5A80", "#914E25"]
 
@@ -554,10 +553,9 @@ if __name__ == "__main__":
     model_name = [
         "TERL",
         "MlpWithTargetSelect",
-        "TransformerWithoutTargetSelect",
     ]
 
-    save_dir = f"TrainedModels/{model_name[0]}"
+    save_dir = f"TrainedModels/TERL/alpha=0.4,beta=0.00001"
 
     project_root = os.path.dirname(os.path.abspath(__file__))
     model_dir = os.path.join(project_root, save_dir)
@@ -584,13 +582,6 @@ if __name__ == "__main__":
     MeanWithTS_agent.load_model(model_dir, device)
     evader_agent2 = ApfAgent(test_env_2.evaders[0].a, test_env_2.evaders[0].w)
 
-    save_dir = f"TrainedModels/{model_name[2]}"
-    model_dir = os.path.join(project_root, save_dir)
-
-    test_env_3 = MarineEnv(seed)
-    MlpWithTS_agent = Agent(device=device, model_name=model_name[2])
-    MlpWithTS_agent.load_model(model_dir, device)
-    evader_agent3 = ApfAgent(test_env_3.evaders[0].a, test_env_3.evaders[0].w)
 
     run_experiment(exp_schedule, args.config)
     wandb.finish()
