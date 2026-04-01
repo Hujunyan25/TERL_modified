@@ -135,7 +135,7 @@ class Pursuer(Robot):
             # Get all pursuers within capture distance
             nearby_pursuers = [
                 p for i, p in enumerate(active_pursuers)
-                if distances_to_evader[i] < self.distance_capture
+                if distances_to_evader[i] < self.distance_capture + 1 and distances_to_evader[i] > self.distance_capture - 1
             ]
 
             # Check if the number of pursuers meets the minimum requirement
@@ -143,6 +143,8 @@ class Pursuer(Robot):
                 continue
 
             involved_pursuers = nearby_pursuers + [self]
+
+            pursuer_distances = [np.linalg.norm(np.array([p.x, p.y]) - evader_position) for p in involved_pursuers]
 
             # Compute angles of all pursuers relative to the evader
             pursuer_angles = [
@@ -224,10 +226,10 @@ class Pursuer(Robot):
             wandb.log(capture_metrics)
             self.capture_event_count += 1
 
-            return True, adjacent_angles, len(nearby_pursuers), evader.id
+            return True, adjacent_angles, pursuer_distances, len(nearby_pursuers), evader.id
 
         # No capturable evader found
-        return False, [], 0, None
+        return False, [], [], 0, None
 
     def perception_output(self, obstacles, pursuers, evaders, in_robot_frame=True):
         """

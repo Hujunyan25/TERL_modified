@@ -626,6 +626,7 @@ class MarineEnv(gym.Env):
         # Define capture thresholds
         capture_distance = self.pursuers[0].distance_capture  # Capture distance
         safe_distance = 0.5 * capture_distance  # Safety distance
+        safe_distance_to_evader = capture_distance - 1.0
 
         # Update time penalty and distance rewards
         for i, dis in enumerate(all_pursuers_dis_before):
@@ -642,8 +643,11 @@ class MarineEnv(gym.Env):
             rewards[i] += self.timestep_penalty
 
             # Apply emergency penalty for unsafe distances
-            if min_dis_after < safe_distance or dis_to_pursuer < safe_distance or dis_to_obstacle < safe_distance:
+            if dis_to_pursuer < safe_distance or dis_to_obstacle < safe_distance:
                 rewards[i] += self.emergency_penalty
+            
+            if min_dis_after < safe_distance_to_evader:
+                rewards[i] += self.emergency_penalty / 3
 
             for dis_to_evader in all_pursuers_dis_after[i]:
                 # Fixed reward within capture distance
@@ -661,7 +665,7 @@ class MarineEnv(gym.Env):
         # Get pursuer observations
         observations, collisions = self.get_pursuers_observations()
 
-        capture_target_states, capture_angles, num_pursuer_captures, capture_evader_ids = self.get_capture_status_and_info()
+        capture_target_states, capture_angles, capture_distances, num_pursuer_captures, capture_evader_ids = self.get_capture_status_and_info()
 
         dones = [False] * len(self.pursuers)
         infos = [{"state": "normal"}] * len(self.pursuers)
@@ -691,6 +695,10 @@ class MarineEnv(gym.Env):
                 rewards[idx] += self.goal_reward * self.compute_capture_reward_factor(
                     capture_angles=capture_angles[idx],
                     pursuer_count=num_pursuer_captures[idx])
+                rewards[idx] += self.goal_reward * self.compute_distance_reward_factor(
+                    capture_distances=capture_distances[idx],
+                    pursuer_count=num_pursuer_captures[idx]
+                )
                 infos[idx] = {
                     "state": f"✌️capture one evader id-{pursuer.captured_evaderId_list[-1]}, total captured evader-{pursuer.captured_evaderId_list} "}
                 pursuer.is_current_target_captured = False
@@ -724,6 +732,28 @@ class MarineEnv(gym.Env):
         reward = (2 * np.pi) / len(angles) * np.exp(-std_angle) - abs(mean_angle - 2 * np.pi / 3)
 
         return reward
+    
+    def compute_distance_reward_factor(self, capture_distances: List[float], pursuer_count: int) -> float:
+        """
+        与角度奖励函数 100% 数量级对齐
+        完美情况：距离奖励 = 角度奖励
+        """
+        if not capture_distances or pursuer_count <= 0:
+            return 0.0
+
+        # 距离分布标准差
+        sigma_dist = np.std(capture_distances)
+        # 平均距离与目标半径的偏差
+        mean_dist = np.mean(capture_distances)
+        dist_deviation = abs(mean_dist - self.capture_distance)
+        
+        # ✅ 核心：基准值 = 角度奖励的理想值（数量级完全对齐）
+        ideal_angular = (2 * np.pi) / pursuer_count
+        
+        # 距离奖励公式（完美值 = ideal_angular，和角度一致）
+        distance_reward_factor = ideal_angular * np.exp(-sigma_dist) * np.exp(-dist_deviation)
+
+        return distance_reward_factor
 
     def update_rob_state(self, rob: Pursuer | Evader, rob_action: int):
         """
@@ -855,15 +885,17 @@ class MarineEnv(gym.Env):
         """
         capture_targets = []
         capture_angles = []
+        capture_distances = []
         num_pursuer_captures = []
         capture_evader_ids = []
 
         for pursuer in self.pursuers:
-            is_captured, capture_angle, num_pursuer_capture, capture_evader_id = (
+            is_captured, capture_angle, capture_distance, num_pursuer_capture, capture_evader_id = (
                 pursuer.check_capture_current_target(pursuers=self.pursuers, evaders=self.evaders))
 
             capture_targets.append(pursuer.is_current_target_captured)
             capture_angles.append(capture_angle)
+            capture_distances.append(capture_distance)
             num_pursuer_captures.append(num_pursuer_capture)
             capture_evader_ids.append(capture_evader_id)
 
@@ -873,7 +905,7 @@ class MarineEnv(gym.Env):
                 if evader.id in pursuer.captured_evaderId_list:
                     evader.deactivated = True
 
-        return capture_targets, capture_angles, num_pursuer_captures, capture_evader_ids
+        return capture_targets, capture_angles, capture_distances, num_pursuer_captures, capture_evader_ids
 
     def get_capture_info(self) -> Tuple[List[List[float]], List[int], List[Optional[int]]]:
         """
@@ -890,7 +922,7 @@ class MarineEnv(gym.Env):
         capture_evader_ids = []
 
         for pursuer in self.pursuers:
-            _, capture_angle, num_pursuer_capture, capture_evader_id = (
+            _, capture_angle, capture_distance,num_pursuer_capture, capture_evader_id = (
                 pursuer.check_capture_current_target(pursuers=self.pursuers, evaders=self.evaders))
 
             capture_angles.append(capture_angle)
