@@ -5,51 +5,46 @@
 seed: 9
 
 # Total number of training timesteps
-total_timesteps: 7000000
+total_timesteps: 1500000
 
 # Frequency of evaluation during training
-eval_freq: 200000
+eval_freq: 30000
 
 # Training schedule parameters
 training_schedule:
   # Timesteps at which changes occur
-  time_steps: [ 0, 2000000, 4000000, 5000000, 6000000 ]
+  time_steps: [ 0 ]
   # Number of pursuers at each stage
-  num_pursuers: [ 3, 4, 7, 11, 15 ]
+  num_pursuers: [ 4 ]
   # Number of evaders at each stage
-  num_evaders: [ 1, 1, 2, 3, 4 ]
-  # Number of ocean current fields used at each stage
-  num_cores: [ 4, 6, 8, 8, 8 ]
+  num_evaders: [ 1 ]
+
   # Number of obstacles in the environment at each stage
-  num_obstacles: [ 0, 1, 2, 4, 6 ]
+  num_obstacles: [ 2 ]
   # Minimum initial distance between pursuers and evaders
-  min_pursuer_evader_init_dis: [ 10.0, 13.0, 15.0, 20.0, 20.0 ]
+  min_pursuer_evader_init_dis: [ 30 ]
 
 # Evaluation schedule parameters
 eval_schedule:
   # Number of episodes per evaluation configuration
   # Increase the number of episodes for more stable evaluation results
-  num_episodes: [ 20, 20, 20, 20, 20 ]
+  num_episodes: [ 5 ]
 
   # Number of pursuers per evaluation step
   # Covers key stages from training: initial (3), mid-stage (7,11), late-stage (15,18)
-  num_pursuers: [ 3, 7, 11, 15, 18 ]
+  num_pursuers: [ 4 ]
 
   # Number of evaders per evaluation step
   # Corresponding to different stages in training
-  num_evaders: [ 1, 2, 3, 4, 5 ]
-
-  # Number of processing units used per evaluation step
-  # Adapt processing units based on task complexity
-  num_cores: [ 4, 6, 8, 8, 8 ]
+  num_evaders: [ 1 ]
 
   # Number of obstacles in the environment per evaluation step
   # Gradually increasing complexity
-  num_obstacles: [ 0, 2, 4, 6, 8 ]
+  num_obstacles: [ 2 ]
 
   # Minimum initial distance between pursuers and evaders during evaluation
   # Use larger distances from the final stage of training to test stability
-  min_pursuer_evader_init_dis: [ 20.0, 20.0, 20.0, 20.0, 20.0 ]
+  min_pursuer_evader_init_dis: [ 20.0 ]
 
 exp_schedule:
   # 20 episodes per evaluation configuration to ensure result stability
@@ -84,9 +79,9 @@ training:
 # Environment parameters
 env:
   # Width of the environment
-  width: 120.0
+  width: 60.0
   # Height of the environment
-  height: 120.0
+  height: 60.0
   # Radius around the pursuer that must be free of objects
   clear_r: 15.0
   # Range of obstacle radius
@@ -129,7 +124,7 @@ pursuer:
 # Evader agent parameters
 evader:
   # Maximum speed of the evader
-  max_speed: 3.5
+  max_speed: 2.8
   # Available acceleration values for the evader
   a: [ -0.4, 0.0, 0.4 ]
   # Available angular velocity (turning speed) values for the evader
@@ -143,4 +138,4 @@ apf:
 
 perception:
   # Maximum number of observable evaders
-  max_evader_num: 8
+  max_evader_num: 1

@@ -70,7 +70,7 @@ pursuer:
 # Evader agent parameters
 evader:
   # Maximum speed of the evader
-  max_speed: 3.5
+  max_speed: 2.0
   # Available acceleration values for the evader
   a: [ -0.4, 0.0, 0.4 ]
   # Available angular velocity (turning speed) values for the evader

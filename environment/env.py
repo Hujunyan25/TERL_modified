@@ -487,7 +487,7 @@ class MarineEnv(gym.Env):
 
             distance_to_obs = [np.linalg.norm([pursuer.x - obstacle.x, pursuer.y - obstacle.y]) - (pursuer.r + obstacle.r) for obstacle in self.obstacles]
 
-            distance_to_obs_min = min(distance_to_obs)
+            distance_to_obs_min = min(distance_to_obs) if len(distance_to_obs) > 0 else pursuer.perception.range
             all_pursuers_distance_to_obstacles.append(distance_to_obs_min)
 
         assert len(all_pursuers_distance_to_obstacles) == len(self.pursuers), ("Number of distances should be equal to "
